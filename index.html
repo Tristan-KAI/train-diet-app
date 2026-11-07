@@ -252,7 +252,7 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
       <div class="small" style="margin-top:10px">改完立即生效；历史记录不受影响。分享给朋友时，每个人打开都是自己的设置，互不影响。</div>
     </div>
 
-    <div class="card">
+    <div class="card" id="aiCard">
       <h2>AI 设置（可选）</h2>
       <div class="mrow" style="grid-template-columns:1fr">
         <div><label>DeepSeek API Key</label><input type="password" id="setKey" onchange="setSetting('key',this.value)" placeholder="sk-..."></div>
@@ -538,6 +538,8 @@ function syncSettingsUI(){
   document.getElementById("setF").value = SETTINGS.f;
   document.getElementById("setKey").value = SETTINGS.key || "";
   document.getElementById("setModel").value = SETTINGS.model || "deepseek-flash";
+  const aiCard = document.getElementById("aiCard");
+  if(aiCard) aiCard.style.display = (APP_KEY && APP_KEY !== "__APP_KEY__") ? "none" : "";
   const pt=document.getElementById("planTarget");
   if(pt) pt.textContent = "目标 "+SETTINGS.kcal+" kcal · 蛋白 "+SETTINGS.p+"g · 碳水 "+SETTINGS.c+"g · 脂肪 "+SETTINGS.f+"g ｜ 每天 8–10k 步";
 }
