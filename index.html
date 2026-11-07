@@ -75,6 +75,10 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
 .chart{display:flex;align-items:flex-end;gap:4px;height:60px;margin-top:6px}
 .chart .bar2{flex:1;background:var(--accent);border-radius:3px 3px 0 0;min-height:2px}
  .chart.kcal .bar2{background:var(--green)}
+.splitadd{display:flex;gap:6px;margin-top:8px}
+.splitadd input{flex:1;background:#12151c;border:1px solid var(--line);color:var(--text);border-radius:9px;padding:8px;font-size:13px;min-width:0}
+.weekwrap .day{display:inline-flex;align-items:center;gap:5px}
+.splitdel{background:none;border:none;color:inherit;opacity:.55;font-size:14px;line-height:1;padding:0;cursor:pointer}
 .splitinput{width:100%;margin-top:8px;background:#12151c;border:1px solid var(--line);color:var(--text);border-radius:9px;padding:9px;font-size:13px}
 .planedit{display:flex;gap:6px;margin-bottom:6px}
 .planedit input{flex:1;background:#0f1115;border:1px solid var(--line);color:var(--text);border-radius:8px;padding:7px;font-size:13px;min-width:0}
@@ -196,7 +200,11 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
     <div class="card">
       <h2>一周安排</h2>
       <div class="weekwrap" id="planSplit"></div>
-      <input id="splitInput" class="splitinput" placeholder="用空格分隔，如：推 拉 腿 有氧 推 拉 休" onchange="setSplit(this.value)">
+      <div class="splitadd">
+        <input id="splitNew" placeholder="加一天：推 / 拉 / 腿 / 有氧 / 休" onkeydown="if(event.key==='Enter')addSplitDay()">
+        <button class="xbtn" onclick="addSplitDay()">添加</button>
+      </div>
+      <div class="small" style="margin-top:6px">点标签上的 × 删除；下面输入框加新的一天</div>
       <div class="small" id="planTarget" style="margin-top:10px"></div>
       <div class="small">有氧日：30–40 分钟快走/爬坡 + 10 分钟臀桥/腿弯举/死虫</div>
     </div>
@@ -739,13 +747,11 @@ function planChips(){
 function renderPlan(){
   const sp = document.getElementById("planSplit");
   if(sp){
-    sp.innerHTML = PLAN.split.map(x=>{
+    sp.innerHTML = PLAN.split.map((x,i)=>{
       const cls = x==="有氧" ? "day aerobic" : (x==="休" ? "day rest" : "day");
-      return '<span class="'+cls+'">'+esc(x)+'</span>';
+      return '<span class="'+cls+'">'+esc(x)+'<button class="splitdel" onclick="delSplitDay('+i+')">×</button></span>';
     }).join('<span class="arr">→</span>');
   }
-  const si = document.getElementById("splitInput");
-  if(si) si.value = PLAN.split.join(" ");
   const box = document.getElementById("planDays");
   if(box){
     box.innerHTML = PLAN.days.map((d,di)=>`
@@ -764,7 +770,15 @@ function renderPlan(){
       </div>`).join("");
   }
 }
-function setSplit(v){ PLAN.split = v.split(/[\s,，、]+/).filter(Boolean); savePlan(); renderPlan(); }
+function addSplitDay(){
+  const el = document.getElementById("splitNew");
+  const v = (el.value || "").trim();
+  if(!v) return;
+  PLAN.split.push(v);
+  el.value = "";
+  savePlan(); renderPlan();
+}
+function delSplitDay(i){ PLAN.split.splice(i,1); savePlan(); renderPlan(); }
 function addPlanDay(){ PLAN.days.push({label:"新训练日", items:[{name:"", scheme:""}]}); savePlan(); renderPlan(); }
 function addPlanItem(di){ PLAN.days[di].items.push({name:"", scheme:""}); savePlan(); renderPlan(); }
 function delPlanItem(di, ii){ PLAN.days[di].items.splice(ii,1); savePlan(); renderPlan(); }
