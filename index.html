@@ -22,7 +22,7 @@ h1{font-size:17px;margin:0;font-weight:700}
 .datewrap{display:flex;gap:8px;align-items:center;padding:0 16px 10px}
 input[type=date]{background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:14px;flex:1}
 nav{display:flex;gap:8px;padding:0 12px 10px}
-nav button{flex:1;padding:9px 2px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--muted);font-size:12.5px;font-weight:600;white-space:nowrap}
+nav button{flex:1;padding:9px 1px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--muted);font-size:11.5px;font-weight:600;white-space:nowrap}
 nav button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
 main{padding:0 12px}
 section{display:none}
@@ -72,7 +72,14 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
 .addset{width:100%;margin-top:2px;background:#0f1115;border:1px dashed var(--line);color:var(--muted);border-radius:8px;padding:7px;font-size:12px}
 .chart{display:flex;align-items:flex-end;gap:4px;height:60px;margin-top:6px}
 .chart .bar2{flex:1;background:var(--accent);border-radius:3px 3px 0 0;min-height:2px}
-.chart.kcal .bar2{background:var(--green)}
+ .chart.kcal .bar2{background:var(--green)}
+.chatlist{display:flex;flex-direction:column;gap:8px;max-height:48vh;overflow-y:auto;margin-bottom:10px;padding:2px}
+.msg{max-width:85%;padding:9px 12px;border-radius:12px;font-size:14px;line-height:1.5;white-space:pre-wrap;word-break:break-word}
+.msg.user{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:4px}
+.msg.ai{align-self:flex-start;background:#12151c;border:1px solid var(--line);border-bottom-left-radius:4px}
+.msg.typing{color:var(--muted)}
+.chatinput{display:flex;gap:8px;align-items:flex-end}
+.chatinput textarea{flex:1;margin-bottom:0;min-height:44px;max-height:120px}
 .row.custom{grid-template-columns:1.5fr 1fr 34px}
 .cname{padding:8px 2px;font-size:13px;align-self:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 </style>
@@ -93,6 +100,7 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
   <button id="tabD" onclick="switchTab('d')">饮食</button>
   <button id="tabP" onclick="switchTab('p')">计划</button>
   <button id="tabA" onclick="switchTab('a')">数据</button>
+  <button id="tabC" onclick="switchTab('c')">AI</button>
   <button id="tabS" onclick="switchTab('s')">设置</button>
 </nav>
 
@@ -250,11 +258,20 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
       <div id="reportBox" class="small" style="margin-top:10px;white-space:pre-wrap"></div>
     </div>
 
+  </section>
+
+  <!-- AI 聊天 -->
+  <section id="secC">
     <div class="card">
-      <h2>AI 问答</h2>
-      <textarea id="askInput" placeholder="例如：今天还能吃多少蛋白？晚上练腿，碳水怎么分配？"></textarea>
-      <button class="addbtn" onclick="aiAsk()">💬 提问</button>
-      <div id="askOut" class="small" style="margin-top:10px;white-space:pre-wrap"></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h2 style="margin:0">AI 助手</h2>
+        <button class="xbtn" onclick="clearChat()">清空</button>
+      </div>
+      <div class="chatlist" id="chatList"></div>
+      <div class="chatinput">
+        <textarea id="chatInput" placeholder="问点什么… 例如：今天还能吃多少蛋白？"></textarea>
+        <button class="xbtn" onclick="sendChat()">发送</button>
+      </div>
     </div>
   </section>
 
@@ -672,6 +689,7 @@ function render(){
   renderTrain();
   renderDiet();
   syncSettingsUI();
+  renderChat();
   updateSummary();
 }
 function syncSettingsUI(){
@@ -762,11 +780,13 @@ function switchTab(k){
   document.getElementById("secD").classList.toggle("on",k==="d");
   document.getElementById("secP").classList.toggle("on",k==="p");
   document.getElementById("secA").classList.toggle("on",k==="a");
+  document.getElementById("secC").classList.toggle("on",k==="c");
   document.getElementById("secS").classList.toggle("on",k==="s");
   document.getElementById("tabT").classList.toggle("on",k==="t");
   document.getElementById("tabD").classList.toggle("on",k==="d");
   document.getElementById("tabP").classList.toggle("on",k==="p");
   document.getElementById("tabA").classList.toggle("on",k==="a");
+  document.getElementById("tabC").classList.toggle("on",k==="c");
   document.getElementById("tabS").classList.toggle("on",k==="s");
 }
 
@@ -842,6 +862,48 @@ function delManual(i){ day().manual.splice(i,1); save(); renderDiet(); updateSum
 /* ---------- 日期 ---------- */
 function onDate(v){ date=v||localDate(); render(); }
 function today(){ date=localDate(); render(); }
+
+/* ---------- AI 聊天 ---------- */
+let CHAT = [];
+try{ CHAT = JSON.parse(localStorage.getItem("train_diet_chat_v1") || "[]"); }catch(e){ CHAT = []; }
+function saveChat(){ try{ localStorage.setItem("train_diet_chat_v1", JSON.stringify(CHAT.slice(-40))); }catch(e){} }
+function renderChat(){
+  const el = document.getElementById("chatList");
+  if(!el) return;
+  if(!CHAT.length){
+    el.innerHTML = '<div class="msg ai">你好，我是你的健身营养助手。可以问我：今天还能吃多少蛋白？练腿日碳水怎么分？这周训练有什么问题？</div>';
+    return;
+  }
+  el.innerHTML = CHAT.map(m=>`<div class="msg ${m.role==="user"?"user":"ai"}">${esc(m.content)}</div>`).join("");
+  el.scrollTop = el.scrollHeight;
+}
+async function sendChat(){
+  const box = document.getElementById("chatInput");
+  const txt = box.value.trim();
+  if(!txt) return;
+  if(!hasKey()){ toast("没有可用的 Key"); return; }
+  box.value = "";
+  CHAT.push({role:"user", content:txt});
+  saveChat(); renderChat();
+  const list = document.getElementById("chatList");
+  const typing = document.createElement("div");
+  typing.className = "msg ai typing"; typing.textContent = "思考中…";
+  list.appendChild(typing); list.scrollTop = list.scrollHeight;
+  try{
+    const t = calcDiet();
+    const ctx = "【当前数据】体重"+SETTINGS.bw+"kg；目标"+SETTINGS.kcal+"kcal/蛋白"+SETTINGS.p+"g/碳水"+SETTINGS.c+"g/脂肪"+SETTINGS.f+"g；今日已摄入"+Math.round(t.kcal)+"kcal/蛋白"+Math.round(t.p)+"g/碳水"+Math.round(t.c)+"g/脂肪"+Math.round(t.f)+"g。";
+    const msgs = [{role:"system", content:"你是减脂期的健身营养助手，回答简短、具体、可执行。中文。\n"+ctx}].concat(CHAT.slice(-12));
+    const reply = await aiCall(msgs, {temperature:0.5});
+    typing.remove();
+    CHAT.push({role:"assistant", content:reply.trim()});
+    saveChat(); renderChat();
+  }catch(err){
+    typing.remove();
+    CHAT.push({role:"assistant", content:"（出错："+err.message+"）"});
+    saveChat(); renderChat();
+  }
+}
+function clearChat(){ CHAT = []; saveChat(); renderChat(); toast("已清空"); }
 
 /* ---------- 导出 ---------- */
 function exportText(){
