@@ -1,4 +1,4 @@
-const CACHE = "trainapp-v5";
+const CACHE = "trainapp-v6";
 const ASSETS = [
   "./",
   "./index.html",

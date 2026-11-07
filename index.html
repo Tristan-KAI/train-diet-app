@@ -22,7 +22,7 @@ h1{font-size:17px;margin:0;font-weight:700}
 .datewrap{display:flex;gap:8px;align-items:center;padding:0 16px 10px}
 input[type=date]{background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:14px;flex:1}
 nav{display:flex;gap:8px;padding:0 12px 10px}
-nav button{flex:1;padding:10px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--muted);font-size:15px;font-weight:600}
+nav button{flex:1;padding:9px 2px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--muted);font-size:12.5px;font-weight:600;white-space:nowrap}
 nav button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
 main{padding:0 12px}
 section{display:none}
@@ -73,6 +73,8 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
 .chart{display:flex;align-items:flex-end;gap:4px;height:60px;margin-top:6px}
 .chart .bar2{flex:1;background:var(--accent);border-radius:3px 3px 0 0;min-height:2px}
 .chart.kcal .bar2{background:var(--green)}
+.row.custom{grid-template-columns:1.5fr 1fr 34px}
+.cname{padding:8px 2px;font-size:13px;align-self:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -90,6 +92,7 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
   <button id="tabT" class="on" onclick="switchTab('t')">训练</button>
   <button id="tabD" onclick="switchTab('d')">饮食</button>
   <button id="tabP" onclick="switchTab('p')">计划</button>
+  <button id="tabA" onclick="switchTab('a')">数据</button>
   <button id="tabS" onclick="switchTab('s')">设置</button>
 </nav>
 
@@ -132,13 +135,6 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
       <div class="stat" style="margin-top:10px"><span>总容量</span><b id="tvol">0 kg</b></div>
     </div>
 
-    <div class="card">
-      <h2>最近 7 天</h2>
-      <div class="small">训练容量（kg）</div>
-      <div class="chart" id="chartVol"></div>
-      <div class="small" style="margin-top:10px">摄入热量（kcal）</div>
-      <div class="chart kcal" id="chartKcal"></div>
-    </div>
   </section>
 
   <!-- 饮食 -->
@@ -147,6 +143,7 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
       <h2>快速输入（打字自动识别）</h2>
       <textarea id="quickInput" placeholder="例如：鸡胸150 米饭200 香蕉1 鸡蛋2个  （单位：g/克/个/根/片/勺/碗）"></textarea>
       <button class="addbtn" onclick="quickAdd()">＋ 识别并加入</button>
+      <button class="addbtn" onclick="aiParse()" style="border-style:solid">🤖 AI 识别（DeepSeek）</button>
       <div id="quickMsg" class="small" style="margin-top:8px"></div>
     </div>
 
@@ -230,6 +227,17 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
     </div>
   </section>
 
+  <!-- 数据 -->
+  <section id="secA">
+    <div class="card">
+      <h2>最近 7 天</h2>
+      <div class="small">训练容量（kg）</div>
+      <div class="chart" id="chartVol"></div>
+      <div class="small" style="margin-top:10px">摄入热量（kcal）</div>
+      <div class="chart kcal" id="chartKcal"></div>
+    </div>
+  </section>
+
   <!-- 设置 -->
   <section id="secS">
     <div class="card">
@@ -242,6 +250,17 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
         <div><label>脂肪 g</label><input type="number" inputmode="numeric" id="setF" onchange="setSetting('f',this.value)"></div>
       </div>
       <div class="small" style="margin-top:10px">改完立即生效；历史记录不受影响。分享给朋友时，每个人打开都是自己的设置，互不影响。</div>
+    </div>
+
+    <div class="card">
+      <h2>AI 设置（可选）</h2>
+      <div class="mrow" style="grid-template-columns:1fr">
+        <div><label>DeepSeek API Key</label><input type="password" id="setKey" onchange="setSetting('key',this.value)" placeholder="sk-..."></div>
+      </div>
+      <div class="mrow" style="grid-template-columns:1fr;margin-top:8px">
+        <div><label>模型</label><input type="text" id="setModel" onchange="setSetting('model',this.value)" placeholder="deepseek-chat"></div>
+      </div>
+      <div class="small" style="margin-top:8px">Key 只存在你这台设备的浏览器里，不会上传。没有 Key 也能用上面的本地识别。</div>
     </div>
   </section>
 </main>
@@ -370,7 +389,55 @@ function quickAdd(){
   msg.textContent = "已加入 " + items.length + " 项：" + items.map(i => i.name + " " + i.grams + "g").join("、");
   toast("已加入");
 }
-const DEFAULT_SETTINGS = {bw:68.4, kcal:1800, p:150, c:175, f:55};
+
+async function aiParse(){
+  const key = (SETTINGS.key || "").trim();
+  if(!key){ toast("先去「设置」填 DeepSeek API Key"); switchTab('s'); return; }
+  const box = document.getElementById("quickInput");
+  const msg = document.getElementById("quickMsg");
+  const txt = box.value.trim();
+  if(!txt){ toast("先写吃了什么，比如：牛肉面一碗 加个蛋"); return; }
+  msg.textContent = "AI 识别中…";
+  try{
+    const res = await fetch("https://api.deepseek.com/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
+      body: JSON.stringify({
+        model: SETTINGS.model || "deepseek-chat",
+        temperature: 0.2,
+        messages: [
+          { role: "system", content: "你是营养师。把用户描述的食物解析成 JSON 数组，每项含 name(食物名)、grams(克数)、p(蛋白克)、c(碳水克)、f(脂肪克)、kcal(热量)。按常见中式食物估算。只输出 JSON 数组，不要任何解释。" },
+          { role: "user", content: txt }
+        ]
+      })
+    });
+    if(!res.ok){
+      const t = await res.text();
+      throw new Error("HTTP " + res.status + " " + (t || "").slice(0, 160));
+    }
+    const data = await res.json();
+    let content = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
+    content = content.replace(/```json/gi, "").replace(/```/g, "").trim();
+    const arr = JSON.parse(content);
+    if(!Array.isArray(arr) || !arr.length) throw new Error("AI 没返回有效数据");
+    arr.forEach(x=>{
+      day().diet.push({
+        name: String(x.name || "食物"),
+        grams: Math.round(+x.grams || 0),
+        p: +x.p || 0, c: +x.c || 0, f: +x.f || 0, kcal: +x.kcal || 0,
+        custom: true
+      });
+    });
+    save(); renderDiet(); updateSummary();
+    box.value = "";
+    msg.textContent = "AI 已加入 " + arr.length + " 项：" + arr.map(x => x.name).join("、");
+    toast("AI 识别完成");
+  }catch(err){
+    msg.textContent = "识别失败：" + err.message;
+    toast("AI 识别失败");
+  }
+}
+const DEFAULT_SETTINGS = {bw:68.4, kcal:1800, p:150, c:175, f:55, key:"", model:"deepseek-chat"};
 let SETTINGS = Object.assign({}, DEFAULT_SETTINGS);
 try{ Object.assign(SETTINGS, JSON.parse(localStorage.getItem("train_diet_settings_v1")||"{}")); }catch(e){}
 function saveSettings(){ try{ localStorage.setItem("train_diet_settings_v1", JSON.stringify(SETTINGS)); }catch(e){} }
@@ -412,7 +479,10 @@ function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").rep
 function per100(f,g){ const k=g/100; return {p:f.p*k,c:f.c*k,f:f.f*k,kcal:f.kcal*k}; }
 function calcDiet(){
   const d=day(); let t={p:0,c:0,f:0,kcal:0};
-  d.diet.forEach(it=>{ const f=FOODS[it.name]; if(!f) return; const m=per100(f,it.grams); t.p+=m.p;t.c+=m.c;t.f+=m.f;t.kcal+=m.kcal; });
+  d.diet.forEach(it=>{
+    if(it.custom){ t.p+=(+it.p||0); t.c+=(+it.c||0); t.f+=(+it.f||0); t.kcal+=(+it.kcal||0); return; }
+    const f=FOODS[it.name]; if(!f) return; const m=per100(f,it.grams); t.p+=m.p;t.c+=m.c;t.f+=m.f;t.kcal+=m.kcal;
+  });
   d.manual.forEach(m=>{ t.p+=(+m.p||0);t.c+=(+m.c||0);t.f+=(+m.f||0);t.kcal+=(+m.kcal||0); });
   return t;
 }
@@ -463,10 +533,13 @@ function syncSettingsUI(){
   document.getElementById("setP").value = SETTINGS.p;
   document.getElementById("setC").value = SETTINGS.c;
   document.getElementById("setF").value = SETTINGS.f;
+  document.getElementById("setKey").value = SETTINGS.key || "";
+  document.getElementById("setModel").value = SETTINGS.model || "deepseek-chat";
   const pt=document.getElementById("planTarget");
   if(pt) pt.textContent = "目标 "+SETTINGS.kcal+" kcal · 蛋白 "+SETTINGS.p+"g · 碳水 "+SETTINGS.c+"g · 脂肪 "+SETTINGS.f+"g ｜ 每天 8–10k 步";
 }
 function setSetting(k,v){
+  if(k==="key" || k==="model"){ SETTINGS[k] = String(v||"").trim(); saveSettings(); return; }
   const n = +v;
   if(!isFinite(n) || n<=0) return;
   SETTINGS[k]=n; saveSettings(); syncSettingsUI(); updateSummary();
@@ -500,6 +573,13 @@ function renderDiet(){
   const sel=document.getElementById("foodSel");
   sel.innerHTML = Object.keys(FOODS).map(n=>`<option>${n}</option>`).join("");
   document.getElementById("drows").innerHTML = d.diet.map((it,i)=>{
+    if(it.custom){
+      return `<div class="row custom" data-i="${i}">
+        <span class="cname">${esc(it.name)} · ${it.grams}g</span>
+        <span class="small" style="text-align:right">P${r(it.p)} C${r(it.c)} F${r(it.f)} · ${Math.round(it.kcal)}kcal</span>
+        <button class="del" data-del="1">✕</button>
+      </div>`;
+    }
     const f=FOODS[it.name]; const m=f?per100(f,it.grams):{p:0,c:0,f:0,kcal:0};
     return `<div class="row diet" data-i="${i}">
       <select data-f="name">${Object.keys(FOODS).map(n=>`<option ${n===it.name?"selected":""}>${n}</option>`).join("")}</select>
@@ -532,10 +612,12 @@ function switchTab(k){
   document.getElementById("secT").classList.toggle("on",k==="t");
   document.getElementById("secD").classList.toggle("on",k==="d");
   document.getElementById("secP").classList.toggle("on",k==="p");
+  document.getElementById("secA").classList.toggle("on",k==="a");
   document.getElementById("secS").classList.toggle("on",k==="s");
   document.getElementById("tabT").classList.toggle("on",k==="t");
   document.getElementById("tabD").classList.toggle("on",k==="d");
   document.getElementById("tabP").classList.toggle("on",k==="p");
+  document.getElementById("tabA").classList.toggle("on",k==="a");
   document.getElementById("tabS").classList.toggle("on",k==="s");
 }
 
@@ -623,7 +705,11 @@ function exportText(){
   });
   else s+="（无记录）\n";
   s += "\n— 饮食 —\n";
-  if(d.diet.length) d.diet.forEach(it=>{ const f=FOODS[it.name]; const m=f?per100(f,it.grams):null; s+="· "+it.name+" "+it.grams+"g"+(m?" = P"+r(m.p)+" C"+r(m.c)+" F"+r(m.f)+" "+Math.round(m.kcal)+"kcal":"")+"\n"; });
+  if(d.diet.length) d.diet.forEach(it=>{
+    if(it.custom){ s+="· "+it.name+" "+it.grams+"g = P"+r(it.p)+" C"+r(it.c)+" F"+r(it.f)+" "+Math.round(it.kcal)+"kcal\n"; return; }
+    const f=FOODS[it.name]; const m=f?per100(f,it.grams):null;
+    s+="· "+it.name+" "+it.grams+"g"+(m?" = P"+r(m.p)+" C"+r(m.c)+" F"+r(m.f)+" "+Math.round(m.kcal)+"kcal":"")+"\n";
+  });
   d.manual.forEach(m=>{ s+="· 手动 P"+r(m.p)+" C"+r(m.c)+" F"+r(m.f)+" "+Math.round(m.kcal)+"kcal\n"; });
   s += "\n摄入 "+Math.round(t.kcal)+" kcal（P"+r(t.p)+" C"+r(t.c)+" F"+r(t.f)+"）\n";
   s += "目标 "+SETTINGS.kcal+" kcal（P"+SETTINGS.p+" C"+SETTINGS.c+" F"+SETTINGS.f+"）\n";
