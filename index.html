@@ -258,7 +258,7 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
         <div><label>DeepSeek API Key</label><input type="password" id="setKey" onchange="setSetting('key',this.value)" placeholder="sk-..."></div>
       </div>
       <div class="mrow" style="grid-template-columns:1fr;margin-top:8px">
-        <div><label>模型</label><input type="text" id="setModel" onchange="setSetting('model',this.value)" placeholder="deepseek-chat"></div>
+        <div><label>模型</label><input type="text" id="setModel" onchange="setSetting('model',this.value)" placeholder="deepseek-flash"></div>
       </div>
       <div class="small" style="margin-top:8px">Key 只存在你这台设备的浏览器里，不会上传。没有 Key 也能用上面的本地识别。</div>
     </div>
@@ -403,7 +403,7 @@ async function aiParse(){
       method: "POST",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
       body: JSON.stringify({
-        model: SETTINGS.model || "deepseek-chat",
+        model: SETTINGS.model || "deepseek-flash",
         temperature: 0.2,
         messages: [
           { role: "system", content: "你是营养师。把用户描述的食物解析成 JSON 数组，每项含 name(食物名)、grams(克数)、p(蛋白克)、c(碳水克)、f(脂肪克)、kcal(热量)。按常见中式食物估算。只输出 JSON 数组，不要任何解释。" },
@@ -437,7 +437,7 @@ async function aiParse(){
     toast("AI 识别失败");
   }
 }
-const DEFAULT_SETTINGS = {bw:68.4, kcal:1800, p:150, c:175, f:55, key:"", model:"deepseek-chat"};
+const DEFAULT_SETTINGS = {bw:68.4, kcal:1800, p:150, c:175, f:55, key:"", model:"deepseek-flash"};
 let SETTINGS = Object.assign({}, DEFAULT_SETTINGS);
 try{ Object.assign(SETTINGS, JSON.parse(localStorage.getItem("train_diet_settings_v1")||"{}")); }catch(e){}
 function saveSettings(){ try{ localStorage.setItem("train_diet_settings_v1", JSON.stringify(SETTINGS)); }catch(e){} }
@@ -534,7 +534,7 @@ function syncSettingsUI(){
   document.getElementById("setC").value = SETTINGS.c;
   document.getElementById("setF").value = SETTINGS.f;
   document.getElementById("setKey").value = SETTINGS.key || "";
-  document.getElementById("setModel").value = SETTINGS.model || "deepseek-chat";
+  document.getElementById("setModel").value = SETTINGS.model || "deepseek-flash";
   const pt=document.getElementById("planTarget");
   if(pt) pt.textContent = "目标 "+SETTINGS.kcal+" kcal · 蛋白 "+SETTINGS.p+"g · 碳水 "+SETTINGS.c+"g · 脂肪 "+SETTINGS.f+"g ｜ 每天 8–10k 步";
 }
