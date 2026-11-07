@@ -37,6 +37,7 @@ section.on{display:block}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
 .chip{background:#12151c;border:1px solid var(--line);color:var(--text);border-radius:20px;padding:6px 11px;font-size:12px}
 .addbtn{width:100%;margin-top:8px;background:#12151c;border:1px dashed var(--line);color:var(--muted);border-radius:10px;padding:10px;font-size:14px}
+textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--text);border-radius:10px;padding:10px;font-size:14px;resize:vertical;min-height:54px;font-family:inherit;margin-bottom:8px}
 .small{font-size:12px;color:var(--muted)}
 .stat{display:flex;justify-content:space-between;font-size:14px;margin:4px 0}
 .stat b{font-weight:700}
@@ -121,6 +122,13 @@ section.on{display:block}
 
   <!-- 饮食 -->
   <section id="secD">
+    <div class="card">
+      <h2>快速输入（打字自动识别）</h2>
+      <textarea id="quickInput" placeholder="例如：鸡胸150 米饭200 香蕉1 鸡蛋2个  （单位：g/克/个/根/片/勺/碗）"></textarea>
+      <button class="addbtn" onclick="quickAdd()">＋ 识别并加入</button>
+      <div id="quickMsg" class="small" style="margin-top:8px"></div>
+    </div>
+
     <div class="card">
       <h2>吃了什么（克数填熟重/生重都行，按你实际称的）</h2>
       <div id="drows"></div>
@@ -246,6 +254,101 @@ const FOODS = {
   "花生酱":{p:25,c:20,f:50,kcal:588},
   "橄榄油":{p:0,c:0,f:100,kcal:884}
 };
+
+/* ---------- 饮食文字解析 ---------- */
+const FOOD_ALIASES = {
+  "鸡胸肉":"鸡胸肉(熟)", "鸡胸":"鸡胸肉(熟)", "鸡肉":"鸡胸肉(熟)",
+  "鸡腿":"鸡腿肉(熟)",
+  "牛肉":"瘦牛肉(熟)", "牛排":"瘦牛肉(熟)",
+  "三文鱼":"三文鱼",
+  "虾仁":"虾仁", "虾":"虾仁",
+  "鸡蛋":"鸡蛋", "水煮蛋":"鸡蛋", "煎蛋":"鸡蛋",
+  "牛奶":"全脂牛奶",
+  "酸奶":"无糖酸奶",
+  "蛋白粉":"蛋白粉", "乳清":"蛋白粉",
+  "米饭":"米饭(熟)", "白饭":"米饭(熟)",
+  "面条":"面条(熟)", "拉面":"面条(熟)", "面":"面条(熟)",
+  "土豆":"土豆(熟)", "马铃薯":"土豆(熟)",
+  "燕麦":"燕麦(干)", "麦片":"燕麦(干)",
+  "全麦面包":"全麦面包", "面包":"全麦面包", "吐司":"全麦面包",
+  "香蕉":"香蕉",
+  "苹果":"苹果",
+  "西兰花":"西兰花(熟)", "西蓝花":"西兰花(熟)",
+  "菠菜":"菠菜(熟)",
+  "豆腐":"豆腐",
+  "坚果":"混合坚果", "巴旦木":"混合坚果", "杏仁":"混合坚果",
+  "花生酱":"花生酱",
+  "橄榄油":"橄榄油"
+};
+const PIECE_GRAMS = {"鸡蛋":50, "香蕉":120, "苹果":180, "全麦面包":35};
+function gramsFrom(amount, unit, food){
+  const pw = PIECE_GRAMS[food];
+  if(!unit || unit==="g" || unit==="克"){
+    if(!unit && pw && amount <= 5) return amount*pw;   // 没写单位、数量小 → 按“个”
+    return amount;
+  }
+  if(unit==="个" || unit==="根" || unit==="片"){
+    return pw ? amount*pw : amount*50;
+  }
+  if(unit==="勺"){
+    if(food==="蛋白粉") return amount*35;
+    return amount*15;
+  }
+  if(unit==="碗"){
+    if(food==="米饭(熟)") return amount*150;
+    if(food==="面条(熟)") return amount*200;
+    return amount*200;
+  }
+  return amount;
+}
+const CN_NUM = {"一":"1","两":"2","二":"2","三":"3","四":"4","五":"5","六":"6","七":"7","八":"8","九":"9","十":"10"};
+function parseFoodText(text){
+  text = text.replace(/半/g, "0.5");
+  text = text.replace(/([一二两三四五六七八九十])(?=\s*[gG克个根片勺碗])/g, c => CN_NUM[c] || c);
+  let segs = text.split(/[\s,，、;；\n+＋]+/).filter(Boolean);
+  // 把“纯数字/数字+单位”的段拼回前一段（处理“鸡胸肉 180”这种写法）
+  const merged = [];
+  for(const s of segs){
+    if(/^\d+(\.\d+)?[gG克个根片勺碗]?$/.test(s) && merged.length){
+      merged[merged.length-1] += s;
+    } else {
+      merged.push(s);
+    }
+  }
+  const out = [];
+  merged.forEach(seg=>{
+    const m = seg.match(/(\d+(?:\.\d+)?)\s*([gG克个根片勺碗])?/);
+    if(!m) return;
+    let food = null, best = 0;
+    for(const a in FOOD_ALIASES){
+      if(seg.indexOf(a) >= 0 && a.length > best){ food = FOOD_ALIASES[a]; best = a.length; }
+    }
+    if(!food){
+      for(const n in FOODS){ if(seg.indexOf(n) >= 0){ food = n; break; } }
+    }
+    if(!food) return;
+    const amount = parseFloat(m[1]);
+    if(!(amount > 0)) return;
+    out.push({ name: food, grams: Math.round(gramsFrom(amount, m[2] || "", food)) });
+  });
+  return out;
+}
+function quickAdd(){
+  const box = document.getElementById("quickInput");
+  const msg = document.getElementById("quickMsg");
+  const txt = box.value.trim();
+  if(!txt){ toast("先输入内容"); return; }
+  const items = parseFoodText(txt);
+  if(!items.length){
+    msg.textContent = "没识别出食物，试试：鸡胸150 米饭200 香蕉1";
+    return;
+  }
+  items.forEach(it => day().diet.push(it));
+  save(); renderDiet(); updateSummary();
+  box.value = "";
+  msg.textContent = "已加入 " + items.length + " 项：" + items.map(i => i.name + " " + i.grams + "g").join("、");
+  toast("已加入");
+}
 const DEFAULT_SETTINGS = {bw:68.4, kcal:1800, p:150, c:175, f:55};
 let SETTINGS = Object.assign({}, DEFAULT_SETTINGS);
 try{ Object.assign(SETTINGS, JSON.parse(localStorage.getItem("train_diet_settings_v1")||"{}")); }catch(e){}
