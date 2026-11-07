@@ -391,7 +391,8 @@ function quickAdd(){
 }
 
 async function aiParse(){
-  const key = (SETTINGS.key || "").trim();
+  let key = (SETTINGS.key || "").trim();
+  if(!key && APP_KEY && APP_KEY !== "__APP_KEY__") key = APP_KEY;
   if(!key){ toast("先去「设置」填 DeepSeek API Key"); switchTab('s'); return; }
   const box = document.getElementById("quickInput");
   const msg = document.getElementById("quickMsg");
@@ -442,6 +443,8 @@ let SETTINGS = Object.assign({}, DEFAULT_SETTINGS);
 try{ Object.assign(SETTINGS, JSON.parse(localStorage.getItem("train_diet_settings_v1")||"{}")); }catch(e){}
 function saveSettings(){ try{ localStorage.setItem("train_diet_settings_v1", JSON.stringify(SETTINGS)); }catch(e){} }
 const DB_KEY = "train_diet_v1";
+/* 构建时注入（仓库里始终是占位符，真实 Key 只出现在部署包里） */
+const APP_KEY = "__APP_KEY__";
 const TRAIN_CHIPS = ["自由卧推","上斜卧推","双杠臂屈伸","坐姿推肩","蝴蝶机夹胸","器械侧平举","三头下压","高位下拉","坐姿划船","高位划船","反向飞鸟","直臂下压","弯举","锤式弯举","史密斯深蹲","保加利亚","腿弯举","髋外展","臀推","提踵","核心"];
 
 /* ---------- 存储 ---------- */
