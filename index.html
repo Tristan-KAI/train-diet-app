@@ -60,6 +60,19 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
 .planrow:last-child{border-bottom:none}
 .planrow b{color:var(--accent);font-weight:600;white-space:nowrap}
 .opt{font-style:normal;font-size:11px;color:var(--muted);background:#12151c;border:1px solid var(--line);border-radius:6px;padding:1px 5px;margin-left:4px}
+.excard{background:#12151c;border:1px solid var(--line);border-radius:12px;padding:10px;margin-bottom:8px}
+.exhead{display:flex;gap:6px;margin-bottom:8px}
+.exhead input{flex:1;background:#0f1115;border:1px solid var(--line);color:var(--text);border-radius:8px;padding:8px;font-size:14px;min-width:0}
+.exhead .del{width:36px;background:#0f1115;border:1px solid var(--line);color:var(--muted);border-radius:8px}
+.setrow{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+.setrow .setno{width:18px;text-align:center;font-size:11px;color:var(--muted)}
+.setrow input{flex:1;background:#0f1115;border:1px solid var(--line);color:var(--text);border-radius:8px;padding:7px;font-size:13px;min-width:0;text-align:center}
+.setrow .x{color:var(--muted);font-size:12px}
+.setrow .delset{width:30px;background:#0f1115;border:1px solid var(--line);color:var(--muted);border-radius:8px;padding:6px 0}
+.addset{width:100%;margin-top:2px;background:#0f1115;border:1px dashed var(--line);color:var(--muted);border-radius:8px;padding:7px;font-size:12px}
+.chart{display:flex;align-items:flex-end;gap:4px;height:60px;margin-top:6px}
+.chart .bar2{flex:1;background:var(--accent);border-radius:3px 3px 0 0;min-height:2px}
+.chart.kcal .bar2{background:var(--green)}
 </style>
 </head>
 <body>
@@ -112,11 +125,19 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
     </div>
 
     <div class="card">
-      <h2>动作（重量 / 组 / 次）</h2>
+      <h2>动作（每组单独记录）</h2>
       <div id="trows"></div>
       <div class="chips" id="tchips"></div>
-      <button class="addbtn" onclick="addTrain('')">＋ 添加一行</button>
+      <button class="addbtn" onclick="addTrain('')">＋ 添加动作</button>
       <div class="stat" style="margin-top:10px"><span>总容量</span><b id="tvol">0 kg</b></div>
+    </div>
+
+    <div class="card">
+      <h2>最近 7 天</h2>
+      <div class="small">训练容量（kg）</div>
+      <div class="chart" id="chartVol"></div>
+      <div class="small" style="margin-top:10px">摄入热量（kcal）</div>
+      <div class="chart kcal" id="chartKcal"></div>
     </div>
   </section>
 
@@ -361,6 +382,23 @@ let db = {};
 try{ db = JSON.parse(localStorage.getItem(DB_KEY)||"{}"); }catch(e){ db={}; }
 let date = localDate();
 
+function migrateTrain(){
+  let changed = false;
+  Object.keys(db).forEach(k=>{
+    const d = db[k]; if(!d || !Array.isArray(d.train)) return;
+    d.train.forEach(it=>{
+      if(Array.isArray(it.sets)) return;
+      const n = Math.max(1, +it.sets || 3), w = +it.weight || 0, r = +it.reps || 0;
+      it.sets = [];
+      for(let i=0;i<n;i++) it.sets.push({w:w, r:r});
+      delete it.weight; delete it.reps;
+      changed = true;
+    });
+  });
+  if(changed) save();
+}
+migrateTrain();
+
 function localDate(){const d=new Date(),z=n=>String(n).padStart(2,"0");return d.getFullYear()+"-"+z(d.getMonth()+1)+"-"+z(d.getDate());}
 function day(){
   if(!db[date]) db[date]={bw:SETTINGS.bw,min:60,met:5,train:[],diet:[],manual:[]};
@@ -379,7 +417,37 @@ function calcDiet(){
   return t;
 }
 function calcBurn(){ const d=day(); return Math.round(d.met*3.5*SETTINGS.bw/200*d.min); }
-function calcVol(){ const d=day(); return d.train.reduce((s,i)=>s+(+i.weight||0)*(+i.sets||0)*(+i.reps||0),0); }
+function setVol(it){ return (it.sets||[]).reduce((s,x)=>s+(+x.w||0)*(+x.r||0),0); }
+function calcVol(){ const d=day(); return d.train.reduce((s,it)=>s+setVol(it),0); }
+function lastNDates(n){
+  const base = new Date(date + "T00:00:00");
+  const out = [];
+  for(let i=n-1;i>=0;i--){
+    const x = new Date(base); x.setDate(x.getDate()-i);
+    const z = v => String(v).padStart(2,"0");
+    out.push(x.getFullYear()+"-"+z(x.getMonth()+1)+"-"+z(x.getDate()));
+  }
+  return out;
+}
+function kcalOfDay(d){
+  if(!d) return 0;
+  let t = 0;
+  (d.diet||[]).forEach(it=>{ const f=FOODS[it.name]; if(f) t += f.kcal*it.grams/100; });
+  (d.manual||[]).forEach(m=>{ t += +m.kcal || 0; });
+  return t;
+}
+function renderHistory(){
+  const days = lastNDates(7);
+  const vols = days.map(k => { const d = db[k]; return d ? (d.train||[]).reduce((s,it)=>s+setVol(it),0) : 0; });
+  const kcals = days.map(k => kcalOfDay(db[k]));
+  drawBars("chartVol", vols);
+  drawBars("chartKcal", kcals);
+}
+function drawBars(id, vals){
+  const el = document.getElementById(id); if(!el) return;
+  const mx = Math.max.apply(null, vals.concat([1]));
+  el.innerHTML = vals.map(v=>`<div class="bar2" style="height:${Math.max(Math.round(v/mx*100),2)}%" title="${Math.round(v)}"></div>`).join("");
+}
 
 /* ---------- 渲染 ---------- */
 function render(){
@@ -408,15 +476,24 @@ function renderTrain(){
   document.getElementById("min").value = d.min;
   document.getElementById("met").value = d.met;
   document.getElementById("trows").innerHTML = d.train.map((it,i)=>`
-    <div class="row" data-i="${i}">
-      <input data-f="name" value="${esc(it.name)}" placeholder="动作">
-      <input data-f="weight" type="number" inputmode="decimal" value="${it.weight||""}" placeholder="kg">
-      <input data-f="sets" type="number" inputmode="numeric" value="${it.sets||""}" placeholder="组">
-      <input data-f="reps" type="number" inputmode="numeric" value="${it.reps||""}" placeholder="次">
-      <button class="del" data-del="1">✕</button>
+    <div class="excard">
+      <div class="exhead">
+        <input data-ex="${i}" data-f="name" value="${esc(it.name)}" placeholder="动作名">
+        <button class="del" data-del-ex="${i}">✕</button>
+      </div>
+      ${it.sets.map((s,si)=>`
+        <div class="setrow">
+          <span class="setno">${si+1}</span>
+          <input data-ex="${i}" data-si="${si}" data-f="w" type="number" inputmode="decimal" value="${s.w||""}" placeholder="kg">
+          <span class="x">×</span>
+          <input data-ex="${i}" data-si="${si}" data-f="r" type="number" inputmode="numeric" value="${s.r||""}" placeholder="次">
+          <button class="delset" data-del-set="${i}-${si}">−</button>
+        </div>`).join("")}
+      <button class="addset" data-add-set="${i}">＋ 加一组</button>
     </div>`).join("");
   document.getElementById("tchips").innerHTML = TRAIN_CHIPS.map(n=>`<button class="chip" onclick="addTrain('${n}')">${n}</button>`).join("");
   document.getElementById("tvol").textContent = Math.round(calcVol())+" kg";
+  renderHistory();
 }
 function renderDiet(){
   const d=day();
@@ -464,19 +541,32 @@ function switchTab(k){
 
 /* ---------- 训练操作 ---------- */
 document.getElementById("trows").addEventListener("input",e=>{
-  const row=e.target.closest(".row"); if(!row) return;
-  const i=+row.dataset.i, f=e.target.dataset.f; if(!f) return;
-  const it=day().train[i]; if(!it) return;
-  it[f] = f==="name"? e.target.value : (e.target.value===""?0:+e.target.value);
-  save(); document.getElementById("tvol").textContent = Math.round(calcVol())+" kg";
+  const el = e.target;
+  if(el.dataset.ex === undefined) return;
+  const i = +el.dataset.ex;
+  const it = day().train[i]; if(!it) return;
+  if(el.dataset.f === "name"){ it.name = el.value; save(); return; }
+  const si = +el.dataset.si;
+  const st = it.sets[si]; if(!st) return;
+  st[el.dataset.f] = el.value === "" ? 0 : +el.value;
+  save();
+  document.getElementById("tvol").textContent = Math.round(calcVol())+" kg";
 });
 document.getElementById("trows").addEventListener("click",e=>{
-  const b=e.target.closest("button[data-del]"); if(!b) return;
-  const i=+b.closest(".row").dataset.i;
-  day().train.splice(i,1); save(); renderTrain(); updateSummary();
+  const add = e.target.closest("[data-add-set]");
+  if(add){ const i=+add.dataset.addSet; day().train[i].sets.push({w:0,r:10}); save(); renderTrain(); updateSummary(); return; }
+  const delSet = e.target.closest("[data-del-set]");
+  if(delSet){
+    const p = delSet.dataset.delSet.split("-"); const i=+p[0], si=+p[1];
+    const it = day().train[i];
+    if(it && it.sets.length > 1){ it.sets.splice(si,1); save(); renderTrain(); updateSummary(); }
+    return;
+  }
+  const delEx = e.target.closest("[data-del-ex]");
+  if(delEx){ day().train.splice(+delEx.dataset.delEx,1); save(); renderTrain(); updateSummary(); return; }
 });
 function addTrain(name){
-  day().train.push({name:name||"",weight:0,sets:3,reps:10});
+  day().train.push({name:name||"", sets:[{w:0,r:10},{w:0,r:10},{w:0,r:10}]});
   save(); renderTrain(); updateSummary();
 }
 function setMin(v){ day().min=+v||0; save(); updateSummary(); }
@@ -527,7 +617,10 @@ function exportText(){
   const d=day(); const t=calcDiet(); const burn=calcBurn();
   let s = "【"+date+"】训练饮食记录\n体重 "+SETTINGS.bw+"kg\n\n— 训练 —\n";
   s += "时长 "+d.min+"min（MET "+d.met+"），估算消耗 ~"+burn+" kcal\n";
-  if(d.train.length) d.train.forEach(it=>{ s+="· "+it.name+" "+it.weight+"kg×"+it.sets+"组×"+it.reps+"次（容量 "+Math.round(it.weight*it.sets*it.reps)+"kg）\n"; });
+  if(d.train.length) d.train.forEach(it=>{
+    const parts = (it.sets||[]).map(x=>x.w+"kg×"+x.r).join(" / ");
+    s+="· "+it.name+"："+parts+"（容量 "+Math.round(setVol(it))+"kg）\n";
+  });
   else s+="（无记录）\n";
   s += "\n— 饮食 —\n";
   if(d.diet.length) d.diet.forEach(it=>{ const f=FOODS[it.name]; const m=f?per100(f,it.grams):null; s+="· "+it.name+" "+it.grams+"g"+(m?" = P"+r(m.p)+" C"+r(m.c)+" F"+r(m.f)+" "+Math.round(m.kcal)+"kcal":"")+"\n"; });
