@@ -135,6 +135,12 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
       <div class="stat" style="margin-top:10px"><span>总容量</span><b id="tvol">0 kg</b></div>
     </div>
 
+    <div class="card">
+      <h2>AI 记录训练</h2>
+      <textarea id="trainAiInput" placeholder="例如：卧推60 4组8次 上斜50 3组10次 深蹲80 4组6次"></textarea>
+      <button class="addbtn" onclick="aiTrain()">🤖 识别并加入</button>
+      <div id="trainAiMsg" class="small" style="margin-top:8px"></div>
+    </div>
   </section>
 
   <!-- 饮食 -->
@@ -144,6 +150,7 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
       <textarea id="quickInput" placeholder="例如：鸡胸150 米饭200 香蕉1 鸡蛋2个  （单位：g/克/个/根/片/勺/碗）"></textarea>
       <button class="addbtn" onclick="quickAdd()">＋ 识别并加入</button>
       <button class="addbtn" onclick="aiParse()" style="border-style:solid">🤖 AI 识别（DeepSeek）</button>
+      <label class="addbtn" style="display:block;text-align:center;border-style:solid;cursor:pointer">📷 拍照识别<input type="file" accept="image/*" capture="environment" onchange="aiPhoto(this)" style="display:none"></label>
       <div id="quickMsg" class="small" style="margin-top:8px"></div>
     </div>
 
@@ -235,6 +242,19 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
       <div class="chart" id="chartVol"></div>
       <div class="small" style="margin-top:10px">摄入热量（kcal）</div>
       <div class="chart kcal" id="chartKcal"></div>
+    </div>
+
+    <div class="card">
+      <h2>AI 周报</h2>
+      <button class="addbtn" onclick="aiReport()">📊 生成最近 7 天复盘</button>
+      <div id="reportBox" class="small" style="margin-top:10px;white-space:pre-wrap"></div>
+    </div>
+
+    <div class="card">
+      <h2>AI 问答</h2>
+      <textarea id="askInput" placeholder="例如：今天还能吃多少蛋白？晚上练腿，碳水怎么分配？"></textarea>
+      <button class="addbtn" onclick="aiAsk()">💬 提问</button>
+      <div id="askOut" class="small" style="margin-top:10px;white-space:pre-wrap"></div>
     </div>
   </section>
 
@@ -390,45 +410,54 @@ function quickAdd(){
   toast("已加入");
 }
 
+/* ---------- AI 通用 ---------- */
+function hasKey(){ return !!((SETTINGS.key || "").trim() || builtinKey()); }
+async function aiCall(messages, opts){
+  const key = (SETTINGS.key || "").trim() || builtinKey();
+  if(!key) throw new Error("没有可用的 API Key");
+  const res = await fetch("https://api.deepseek.com/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
+    body: JSON.stringify({
+      model: SETTINGS.model || "deepseek-flash",
+      temperature: (opts && opts.temperature != null) ? opts.temperature : 0.2,
+      messages: messages
+    })
+  });
+  if(!res.ok) throw new Error("HTTP " + res.status + " " + (await res.text()).slice(0, 160));
+  const data = await res.json();
+  return (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
+}
+function parseJsonLoose(s){
+  s = (s || "").replace(/```json/gi, "").replace(/```/g, "").trim();
+  const a = s.indexOf("["), b = s.lastIndexOf("]");
+  if(a >= 0 && b > a) s = s.slice(a, b + 1);
+  return JSON.parse(s);
+}
+function addAiFood(x){
+  day().diet.push({
+    name: String(x.name || "食物"),
+    grams: Math.round(+x.grams || 0),
+    p: +x.p || 0, c: +x.c || 0, f: +x.f || 0, kcal: +x.kcal || 0,
+    custom: true
+  });
+}
+
 async function aiParse(){
-  let key = (SETTINGS.key || "").trim();
-  if(!key) key = builtinKey();
-  if(!key){ toast("先去「设置」填 DeepSeek API Key"); switchTab('s'); return; }
+  if(!hasKey()){ toast("没有可用的 Key"); switchTab('s'); return; }
   const box = document.getElementById("quickInput");
   const msg = document.getElementById("quickMsg");
   const txt = box.value.trim();
   if(!txt){ toast("先写吃了什么，比如：牛肉面一碗 加个蛋"); return; }
   msg.textContent = "AI 识别中…";
   try{
-    const res = await fetch("https://api.deepseek.com/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
-      body: JSON.stringify({
-        model: SETTINGS.model || "deepseek-flash",
-        temperature: 0.2,
-        messages: [
-          { role: "system", content: "你是营养师。把用户描述的食物解析成 JSON 数组，每项含 name(食物名)、grams(克数)、p(蛋白克)、c(碳水克)、f(脂肪克)、kcal(热量)。按常见中式食物估算。只输出 JSON 数组，不要任何解释。" },
-          { role: "user", content: txt }
-        ]
-      })
-    });
-    if(!res.ok){
-      const t = await res.text();
-      throw new Error("HTTP " + res.status + " " + (t || "").slice(0, 160));
-    }
-    const data = await res.json();
-    let content = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
-    content = content.replace(/```json/gi, "").replace(/```/g, "").trim();
-    const arr = JSON.parse(content);
+    const out = await aiCall([
+      { role: "system", content: "你是营养师。把用户描述的食物解析成 JSON 数组，每项含 name(食物名)、grams(克数)、p(蛋白克)、c(碳水克)、f(脂肪克)、kcal(热量)。按常见中式食物估算。只输出 JSON 数组，不要任何解释。" },
+      { role: "user", content: txt }
+    ]);
+    const arr = parseJsonLoose(out);
     if(!Array.isArray(arr) || !arr.length) throw new Error("AI 没返回有效数据");
-    arr.forEach(x=>{
-      day().diet.push({
-        name: String(x.name || "食物"),
-        grams: Math.round(+x.grams || 0),
-        p: +x.p || 0, c: +x.c || 0, f: +x.f || 0, kcal: +x.kcal || 0,
-        custom: true
-      });
-    });
+    arr.forEach(addAiFood);
     save(); renderDiet(); updateSummary();
     box.value = "";
     msg.textContent = "AI 已加入 " + arr.length + " 项：" + arr.map(x => x.name).join("、");
@@ -436,6 +465,120 @@ async function aiParse(){
   }catch(err){
     msg.textContent = "识别失败：" + err.message;
     toast("AI 识别失败");
+  }
+}
+
+function compressImage(file){
+  return new Promise((resolve, reject)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const max = 1024;
+      let w = img.width, h = img.height;
+      if(w >= h && w > max){ h = Math.round(h * max / w); w = max; }
+      else if(h > w && h > max){ w = Math.round(w * max / h); h = max; }
+      const c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      c.getContext("2d").drawImage(img, 0, 0, w, h);
+      resolve(c.toDataURL("image/jpeg", 0.82).split(",")[1]);
+    };
+    img.onerror = reject;
+    img.src = URL.createObjectURL(file);
+  });
+}
+async function aiPhoto(input){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  const msg = document.getElementById("quickMsg");
+  if(!hasKey()){ toast("没有可用的 Key"); return; }
+  msg.textContent = "图片识别中…";
+  try{
+    const b64 = await compressImage(file);
+    const out = await aiCall([{ role: "user", content: [
+      { type: "text", text: "这是一张食物照片。识别里面的食物和大致分量，输出 JSON 数组，每项含 name、grams、p、c、f、kcal，按中式食物估算。只输出 JSON 数组。" },
+      { type: "image_url", image_url: { url: "data:image/jpeg;base64," + b64 } }
+    ]}]);
+    const arr = parseJsonLoose(out);
+    if(!Array.isArray(arr) || !arr.length) throw new Error("没识别出食物");
+    arr.forEach(addAiFood);
+    save(); renderDiet(); updateSummary();
+    msg.textContent = "已识别 " + arr.length + " 项：" + arr.map(x => x.name + " " + x.grams + "g").join("、");
+    toast("拍照识别完成");
+  }catch(err){
+    msg.textContent = "识别失败：" + err.message;
+    toast("拍照识别失败");
+  }finally{
+    input.value = "";
+  }
+}
+
+async function aiTrain(){
+  if(!hasKey()){ toast("没有可用的 Key"); return; }
+  const box = document.getElementById("trainAiInput");
+  const msg = document.getElementById("trainAiMsg");
+  const txt = box.value.trim();
+  if(!txt){ toast("先写训练内容"); return; }
+  msg.textContent = "AI 识别中…";
+  try{
+    const out = await aiCall([
+      { role: "system", content: "把用户的训练描述解析成 JSON 数组，每项 {name(动作名), sets:[{w(重量kg), r(次数)}]}。没写重量填 0，没写次数填 0。只输出 JSON 数组。" },
+      { role: "user", content: txt }
+    ]);
+    const arr = parseJsonLoose(out);
+    if(!Array.isArray(arr) || !arr.length) throw new Error("没识别出动作");
+    arr.forEach(x=>{
+      const sets = (x.sets || []).map(s=>({ w: +s.w || 0, r: +s.r || 0 }));
+      day().train.push({ name: String(x.name || "动作"), sets: sets.length ? sets : [{ w: 0, r: 10 }] });
+    });
+    save(); renderTrain(); updateSummary();
+    box.value = "";
+    msg.textContent = "已加入 " + arr.length + " 个动作";
+    toast("训练记录完成");
+  }catch(err){
+    msg.textContent = "识别失败：" + err.message;
+    toast("训练识别失败");
+  }
+}
+
+async function aiReport(){
+  const box = document.getElementById("reportBox");
+  if(!hasKey()){ toast("没有可用的 Key"); return; }
+  box.textContent = "生成中…";
+  const days = lastNDates(7).map(k=>{
+    const d = db[k]; if(!d) return null;
+    return {
+      date: k,
+      vol: Math.round((d.train||[]).reduce((s,it)=>s+setVol(it),0)),
+      kcal: Math.round(kcalOfDay(d)),
+      train: (d.train||[]).map(it=>it.name + ":" + it.sets.map(s=>s.w+"x"+s.r).join("/"))
+    };
+  }).filter(Boolean);
+  try{
+    const txt = await aiCall([
+      { role: "system", content: "你是减脂期健身营养教练。根据最近7天数据给出简短复盘：训练是否均衡、饮食是否达标、下周怎么调整。中文，分点，150字以内。" },
+      { role: "user", content: JSON.stringify({ weight: SETTINGS.bw, target: { kcal: SETTINGS.kcal, p: SETTINGS.p, c: SETTINGS.c, f: SETTINGS.f }, days: days }) }
+    ], { temperature: 0.4 });
+    box.textContent = txt;
+  }catch(err){
+    box.textContent = "失败：" + err.message;
+  }
+}
+
+async function aiAsk(){
+  const q = document.getElementById("askInput").value.trim();
+  if(!q){ toast("先写问题"); return; }
+  const out = document.getElementById("askOut");
+  if(!hasKey()){ toast("没有可用的 Key"); return; }
+  out.textContent = "思考中…";
+  const t = calcDiet();
+  const ctx = "用户体重" + SETTINGS.bw + "kg；今日目标" + SETTINGS.kcal + "kcal/蛋白" + SETTINGS.p + "g/碳水" + SETTINGS.c + "g/脂肪" + SETTINGS.f + "g；今日已摄入" + Math.round(t.kcal) + "kcal/蛋白" + Math.round(t.p) + "g/碳水" + Math.round(t.c) + "g/脂肪" + Math.round(t.f) + "g。";
+  try{
+    const txt = await aiCall([
+      { role: "system", content: "你是减脂期的健身营养助手，回答简短、具体、可执行。中文。" },
+      { role: "user", content: ctx + "\n问题：" + q }
+    ], { temperature: 0.4 });
+    out.textContent = txt;
+  }catch(err){
+    out.textContent = "失败：" + err.message;
   }
 }
 const DEFAULT_SETTINGS = {bw:68.4, kcal:1800, p:150, c:175, f:55, key:"", model:"deepseek-flash"};
