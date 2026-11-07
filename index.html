@@ -240,7 +240,9 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
       </div>
       <div class="chatlist" id="chatList"></div>
       <div class="chatinput">
-        <textarea id="chatInput" placeholder="问点什么… 例如：今天还能吃多少蛋白？"></textarea>
+        <button class="xbtn" onclick="document.getElementById('equipFile').click()">📷</button>
+        <input type="file" id="equipFile" accept="image/*" capture="environment" style="display:none" onchange="aiEquipment(this)">
+        <textarea id="chatInput" placeholder="问点什么… 或点 📷 拍器械识别"></textarea>
         <button class="xbtn" onclick="sendChat()">发送</button>
       </div>
     </div>
@@ -1041,6 +1043,40 @@ async function sendChat(){
     saveChat(); renderChat();
   }
 }
+async function aiEquipment(input){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  input.value = "";
+  if(!hasKey()){ toast("没有可用的 Key"); return; }
+  CHAT.push({role:"user", content:"📷 [器械照片]"});
+  saveChat(); renderChat();
+  const list = document.getElementById("chatList");
+  const typing = document.createElement("div");
+  typing.className = "msg ai typing"; typing.textContent = "识别器械中…";
+  list.appendChild(typing); list.scrollTop = list.scrollHeight;
+  try{
+    const b64 = await compressImage(file);
+    const out = await aiCall([{ role: "user", content: [
+      { type: "text", text: "识别图片里的健身器械或训练动作。输出 JSON：{\"name\":\"动作/器械中文名\",\"tip\":\"一句话用法或注意点\"}。只输出 JSON，不要解释。" },
+      { type: "image_url", image_url: { url: "data:image/jpeg;base64," + b64 } }
+    ]}]);
+    let t = out.replace(/```json/gi, "").replace(/```/g, "").trim();
+    const a = t.indexOf("{"), b = t.lastIndexOf("}");
+    if(a >= 0 && b > a) t = t.slice(a, b + 1);
+    const obj = JSON.parse(t);
+    const name = String(obj.name || "未知器械");
+    day().train.push({name: name, sets: [{w:0,r:10},{w:0,r:10},{w:0,r:10}]});
+    save(); renderTrain(); updateSummary();
+    typing.remove();
+    CHAT.push({role:"assistant", content: "识别到：" + name + "\n" + (obj.tip || "") + "\n\n已加入今日训练（3 组 × 10 次，重量默认 0，去「训练」页填一下重量就行）。"});
+    saveChat(); renderChat();
+  }catch(err){
+    typing.remove();
+    CHAT.push({role:"assistant", content: "识别失败：" + err.message});
+    saveChat(); renderChat();
+  }
+}
+
 function clearChat(){ CHAT = []; saveChat(); renderChat(); toast("已清空"); }
 
 /* ---------- 导出 ---------- */
