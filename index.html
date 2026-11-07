@@ -73,6 +73,11 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
 .chart{display:flex;align-items:flex-end;gap:4px;height:60px;margin-top:6px}
 .chart .bar2{flex:1;background:var(--accent);border-radius:3px 3px 0 0;min-height:2px}
  .chart.kcal .bar2{background:var(--green)}
+.splitinput{width:100%;margin-top:8px;background:#12151c;border:1px solid var(--line);color:var(--text);border-radius:9px;padding:9px;font-size:13px}
+.planedit{display:flex;gap:6px;margin-bottom:6px}
+.planedit input{flex:1;background:#0f1115;border:1px solid var(--line);color:var(--text);border-radius:8px;padding:7px;font-size:13px;min-width:0}
+.planedit .scheme{max-width:96px}
+.planedit .delset{width:30px;background:#0f1115;border:1px solid var(--line);color:var(--muted);border-radius:8px;padding:6px 0}
 .chatlist{display:flex;flex-direction:column;gap:8px;max-height:48vh;overflow-y:auto;margin-bottom:10px;padding:2px}
 .msg{max-width:85%;padding:9px 12px;border-radius:12px;font-size:14px;line-height:1.5;white-space:pre-wrap;word-break:break-word}
 .msg.user{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:4px}
@@ -188,51 +193,16 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
   <section id="secP">
     <div class="card">
       <h2>一周安排</h2>
-      <div class="weekwrap">
-        <span class="day">推</span><span class="arr">→</span>
-        <span class="day">拉</span><span class="arr">→</span>
-        <span class="day">腿</span><span class="arr">→</span>
-        <span class="day aerobic">有氧</span><span class="arr">→</span>
-        <span class="day">推</span><span class="arr">→</span>
-        <span class="day">拉</span><span class="arr">→</span>
-        <span class="day rest">休</span>
-      </div>
+      <div class="weekwrap" id="planSplit"></div>
+      <input id="splitInput" class="splitinput" placeholder="用空格分隔，如：推 拉 腿 有氧 推 拉 休" onchange="setSplit(this.value)">
       <div class="small" id="planTarget" style="margin-top:10px"></div>
-      <div class="small">有氧日：30–40 分钟快走/爬坡（心率 110–130）+ 10 分钟臀桥/腿弯举/死虫</div>
+      <div class="small">有氧日：30–40 分钟快走/爬坡 + 10 分钟臀桥/腿弯举/死虫</div>
     </div>
 
-    <div class="card">
-      <h2>推日 · 胸 + 肩 + 三头</h2>
-      <div class="planrow"><span>自由卧推</span><b>4×8–10</b></div>
-      <div class="planrow"><span>器械上斜卧推</span><b>4×10–12</b></div>
-      <div class="planrow"><span>双杠臂屈伸</span><b>3×10–12</b></div>
-      <div class="planrow"><span>坐姿器械推肩</span><b>3×10–12</b></div>
-      <div class="planrow"><span>蝴蝶机夹胸</span><b>3×12–15</b></div>
-      <div class="planrow"><span>器械侧平举</span><b>4×12–15</b></div>
-      <div class="planrow"><span>绳索三头下压</span><b>3×12–15</b></div>
-    </div>
+    <div id="planDays"></div>
 
     <div class="card">
-      <h2>拉日 · 背 + 后束 + 二头</h2>
-      <div class="planrow"><span>宽握高位下拉</span><b>4×10–12</b></div>
-      <div class="planrow"><span>坐姿划船</span><b>4×10–12</b></div>
-      <div class="planrow"><span>高位划船</span><b>3×10–12</b></div>
-      <div class="planrow"><span>反向飞鸟 / 面拉</span><b>4×12–15</b></div>
-      <div class="planrow"><span>直臂下压 <em class="opt">可选</em></span><b>3×12–15</b></div>
-      <div class="planrow"><span>坐姿 / 牧师凳弯举</span><b>3×10–12</b></div>
-      <div class="planrow"><span>锤式弯举</span><b>3×12–15</b></div>
-    </div>
-
-    <div class="card">
-      <h2>腿日 · 腿 + 臀 + 核心</h2>
-      <div class="planrow"><span>史密斯深蹲</span><b>4×8–10</b></div>
-      <div class="planrow"><span>保加利亚分腿蹲</span><b>3×10–12/侧</b></div>
-      <div class="planrow"><span>坐姿/俯卧腿弯举</span><b>4×10–12</b></div>
-      <div class="planrow"><span>器械髋外展</span><b>4×15</b></div>
-      <div class="planrow"><span>臀推/臀桥</span><b>4×12</b></div>
-      <div class="planrow"><span>站姿提踵</span><b>4×12–15</b></div>
-      <div class="planrow"><span>卷腹 + 平板</span><b>3×12–15 / 3×45–60s</b></div>
-      <div class="planrow"><span>内收肌 <em class="opt">可选</em></span><b>3×12–15</b></div>
+      <button class="addbtn" onclick="addPlanDay()">＋ 添加训练日</button>
     </div>
 
     <div class="card">
@@ -683,12 +653,106 @@ function drawBars(id, vals){
   el.innerHTML = vals.map(v=>`<div class="bar2" style="height:${Math.max(Math.round(v/mx*100),2)}%" title="${Math.round(v)}"></div>`).join("");
 }
 
+/* ---------- 训练计划（可编辑，存本地） ---------- */
+const DEFAULT_PLAN = {
+  split: ["推","拉","腿","有氧","推","拉","休"],
+  days: [
+    {label:"推", items:[
+      {name:"自由卧推", scheme:"4×8–10"},
+      {name:"器械上斜卧推", scheme:"4×10–12"},
+      {name:"双杠臂屈伸", scheme:"3×10–12"},
+      {name:"坐姿器械推肩", scheme:"3×10–12"},
+      {name:"蝴蝶机夹胸", scheme:"3×12–15"},
+      {name:"器械侧平举", scheme:"4×12–15"},
+      {name:"绳索三头下压", scheme:"3×12–15"}
+    ]},
+    {label:"拉", items:[
+      {name:"宽握高位下拉", scheme:"4×10–12"},
+      {name:"坐姿划船", scheme:"4×10–12"},
+      {name:"高位划船", scheme:"3×10–12"},
+      {name:"反向飞鸟/面拉", scheme:"4×12–15"},
+      {name:"直臂下压", scheme:"3×12–15"},
+      {name:"弯举", scheme:"3×10–12"},
+      {name:"锤式弯举", scheme:"3×12–15"}
+    ]},
+    {label:"腿", items:[
+      {name:"史密斯深蹲", scheme:"4×8–10"},
+      {name:"保加利亚分腿蹲", scheme:"3×10–12/侧"},
+      {name:"坐姿/俯卧腿弯举", scheme:"4×10–12"},
+      {name:"器械髋外展", scheme:"4×15"},
+      {name:"臀推/臀桥", scheme:"4×12"},
+      {name:"站姿提踵", scheme:"4×12–15"},
+      {name:"卷腹+平板", scheme:"3×12–15 / 3×45–60s"}
+    ]}
+  ]
+};
+let PLAN = null;
+try{ PLAN = JSON.parse(localStorage.getItem("train_diet_plan_v1") || "null"); }catch(e){}
+if(!PLAN || !Array.isArray(PLAN.days)) PLAN = JSON.parse(JSON.stringify(DEFAULT_PLAN));
+function savePlan(){ try{ localStorage.setItem("train_diet_plan_v1", JSON.stringify(PLAN)); }catch(e){} }
+function planChips(){
+  const names = [];
+  PLAN.days.forEach(d=>d.items.forEach(it=>{ if(it.name && names.indexOf(it.name)<0) names.push(it.name); }));
+  return names.length ? names : TRAIN_CHIPS;
+}
+function renderPlan(){
+  const sp = document.getElementById("planSplit");
+  if(sp){
+    sp.innerHTML = PLAN.split.map(x=>{
+      const cls = x==="有氧" ? "day aerobic" : (x==="休" ? "day rest" : "day");
+      return '<span class="'+cls+'">'+esc(x)+'</span>';
+    }).join('<span class="arr">→</span>');
+  }
+  const si = document.getElementById("splitInput");
+  if(si) si.value = PLAN.split.join(" ");
+  const box = document.getElementById("planDays");
+  if(box){
+    box.innerHTML = PLAN.days.map((d,di)=>`
+      <div class="card" style="background:#12151c">
+        <div class="exhead">
+          <input data-day="${di}" data-f="label" value="${esc(d.label)}" placeholder="训练日名称">
+          <button class="del" data-del-day="${di}">✕</button>
+        </div>
+        ${d.items.map((it,ii)=>`
+          <div class="planedit">
+            <input data-day="${di}" data-item="${ii}" data-f="name" value="${esc(it.name)}" placeholder="动作名">
+            <input class="scheme" data-day="${di}" data-item="${ii}" data-f="scheme" value="${esc(it.scheme||"")}" placeholder="组×次">
+            <button class="delset" data-del-item="${di}-${ii}">−</button>
+          </div>`).join("")}
+        <button class="addset" data-add-item="${di}">＋ 加动作</button>
+      </div>`).join("");
+  }
+}
+function setSplit(v){ PLAN.split = v.split(/[\s,，、]+/).filter(Boolean); savePlan(); renderPlan(); }
+function addPlanDay(){ PLAN.days.push({label:"新训练日", items:[{name:"", scheme:""}]}); savePlan(); renderPlan(); }
+function addPlanItem(di){ PLAN.days[di].items.push({name:"", scheme:""}); savePlan(); renderPlan(); }
+function delPlanItem(di, ii){ PLAN.days[di].items.splice(ii,1); savePlan(); renderPlan(); }
+function delPlanDay(di){ PLAN.days.splice(di,1); savePlan(); renderPlan(); }
+document.getElementById("planDays").addEventListener("input", e=>{
+  const el = e.target;
+  const di = el.dataset.day; if(di===undefined) return;
+  const day = PLAN.days[+di]; if(!day) return;
+  if(el.dataset.f === "label"){ day.label = el.value; savePlan(); return; }
+  const it = day.items[+el.dataset.item]; if(!it) return;
+  it[el.dataset.f] = el.value;
+  savePlan();
+});
+document.getElementById("planDays").addEventListener("click", e=>{
+  const add = e.target.closest("[data-add-item]");
+  if(add){ addPlanItem(+add.dataset.addItem); return; }
+  const dI = e.target.closest("[data-del-item]");
+  if(dI){ const p=dI.dataset.delItem.split("-"); delPlanItem(+p[0],+p[1]); return; }
+  const dD = e.target.closest("[data-del-day]");
+  if(dD){ delPlanDay(+dD.dataset.delDay); return; }
+});
+
 /* ---------- 渲染 ---------- */
 function render(){
   document.getElementById("date").value = date;
   renderTrain();
   renderDiet();
   syncSettingsUI();
+  renderPlan();
   renderChat();
   updateSummary();
 }
@@ -731,7 +795,7 @@ function renderTrain(){
         </div>`).join("")}
       <button class="addset" data-add-set="${i}">＋ 加一组</button>
     </div>`).join("");
-  document.getElementById("tchips").innerHTML = TRAIN_CHIPS.map(n=>`<button class="chip" onclick="addTrain('${n}')">${n}</button>`).join("");
+  document.getElementById("tchips").innerHTML = planChips().map(n=>`<button class="chip" onclick="addTrain('${n}')">${n}</button>`).join("");
   document.getElementById("tvol").textContent = Math.round(calcVol())+" kg";
   renderHistory();
 }
