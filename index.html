@@ -233,6 +233,7 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
         <textarea id="chatInput" placeholder="问点什么… 或点 📷 拍器械识别"></textarea>
         <button class="xbtn" onclick="sendChat()">发送</button>
       </div>
+      <div id="aiUsage" class="small" style="margin-top:8px"></div>
     </div>
   </section>
 
@@ -417,20 +418,32 @@ function parseFoodText(text){
 }
 /* ---------- AI 通用 ---------- */
 function hasKey(){ return !!((SETTINGS.key || "").trim() || builtinKey()); }
+const AI_DAILY_LIMIT = 50;
+const AI_GUARD = "你只负责健身、训练、饮食、营养、减脂相关的问题。若用户问学习、论文、编程、娱乐、写作等无关内容，礼貌拒绝，只回答：我只回答健身饮食相关的问题。";
+function aiUsageKey(){ return "ai_usage_" + localDate(); }
+function aiUsageGet(){ try{ return +localStorage.getItem(aiUsageKey()) || 0; }catch(e){ return 0; } }
+function aiUsageAdd(n){ try{ localStorage.setItem(aiUsageKey(), String(aiUsageGet() + n)); }catch(e){} }
+function aiUsageDraw(){
+  const el = document.getElementById("aiUsage");
+  if(el) el.textContent = "今日 AI 已用 " + aiUsageGet() + " / " + AI_DAILY_LIMIT + " 次";
+}
 async function aiCall(messages, opts){
   const key = (SETTINGS.key || "").trim() || builtinKey();
   if(!key) throw new Error("没有可用的 API Key");
+  if(aiUsageGet() >= AI_DAILY_LIMIT) throw new Error("今日 AI 次数已用完（" + AI_DAILY_LIMIT + " 次），明天再来");
+  const msgs = [{ role: "system", content: AI_GUARD }].concat(messages);
   const res = await fetch("https://api.deepseek.com/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": "Bearer " + key },
     body: JSON.stringify({
       model: SETTINGS.model || "deepseek-flash",
       temperature: (opts && opts.temperature != null) ? opts.temperature : 0.2,
-      messages: messages
+      messages: msgs
     })
   });
   if(!res.ok) throw new Error("HTTP " + res.status + " " + (await res.text()).slice(0, 160));
   const data = await res.json();
+  aiUsageAdd(1); aiUsageDraw();
   return (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || "";
 }
 function parseJsonLoose(s){
@@ -783,6 +796,7 @@ function render(){
   syncSettingsUI();
   renderPlan();
   renderChat();
+  aiUsageDraw();
   renderWeight();
   updateSummary();
 }
