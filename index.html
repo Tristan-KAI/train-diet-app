@@ -131,25 +131,10 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
 
   <!-- 训练 -->
   <section id="secT" class="on">
-    <div class="card">
-      <h2>本次训练</h2>
-      <div class="mrow" style="grid-template-columns:1fr 1fr">
-        <div><label>时长(分钟)</label><input type="number" id="min" onchange="setMin(this.value)"></div>
-        <div><label>强度(MET)</label>
-          <select id="met" onchange="setMet(this.value)">
-            <option value="3.5">轻 3.5</option>
-            <option value="5" selected>中 5</option>
-            <option value="6">重 6</option>
-          </select>
-        </div>
-      </div>
-      <div class="small" style="margin-top:8px">估算消耗 = MET × 3.5 × 体重 ÷ 200 × 时长</div>
-    </div>
 
     <div class="card">
       <h2>动作（每组单独记录）</h2>
       <div id="trows"></div>
-      <div class="chips" id="tchips"></div>
       <button class="addbtn" onclick="addTrain('')">＋ 添加动作</button>
       <div class="stat" style="margin-top:10px"><span>总容量</span><b id="tvol">0 kg</b></div>
     </div>
@@ -165,33 +150,16 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
   <!-- 饮食 -->
   <section id="secD">
     <div class="card">
-      <h2>快速输入（打字自动识别）</h2>
+      <h2>快速输入（AI 识别）</h2>
       <textarea id="quickInput" placeholder="例如：鸡胸150 米饭200 香蕉1 鸡蛋2个  （单位：g/克/个/根/片/勺/碗）"></textarea>
-      <button class="addbtn" onclick="quickAdd()">＋ 识别并加入</button>
-      <button class="addbtn" onclick="aiParse()" style="border-style:solid">🤖 AI 识别（DeepSeek）</button>
-      <label class="addbtn" style="display:block;text-align:center;border-style:solid;cursor:pointer">📷 拍照识别<input type="file" accept="image/*" capture="environment" onchange="aiPhoto(this)" style="display:none"></label>
+      <button class="addbtn" onclick="aiParse()" style="border-style:solid">🤖 AI 识别</button>
+      <label class="addbtn" style="display:block;text-align:center;border-style:solid;cursor:pointer">📷 拍照 / 相册<input type="file" accept="image/*" onchange="aiPhoto(this)" style="display:none"></label>
       <div id="quickMsg" class="small" style="margin-top:8px"></div>
     </div>
 
     <div class="card">
       <h2>吃了什么（克数填熟重/生重都行，按你实际称的）</h2>
       <div id="drows"></div>
-      <div style="display:flex;gap:6px;margin-top:8px">
-        <select id="foodSel" style="flex:1;background:#12151c;border:1px solid var(--line);color:var(--text);border-radius:9px;padding:9px"></select>
-        <button class="xbtn" onclick="addDiet()">添加</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>手动添加（食物库里没有的，直接填这顿的 P/C/F/热量）</h2>
-      <div class="mrow">
-        <div><label>蛋白 g</label><input type="number" id="mp"></div>
-        <div><label>碳水 g</label><input type="number" id="mc"></div>
-        <div><label>脂肪 g</label><input type="number" id="mf"></div>
-        <div><label>热量 kcal</label><input type="number" id="mk"></div>
-      </div>
-      <button class="addbtn" onclick="addManual()">＋ 加入今日</button>
-      <div id="mlist" class="small" style="margin-top:8px"></div>
     </div>
   </section>
 
@@ -250,7 +218,7 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
       <div class="chatlist" id="chatList"></div>
       <div class="chatinput">
         <button class="xbtn" onclick="document.getElementById('equipFile').click()">📷</button>
-        <input type="file" id="equipFile" accept="image/*" capture="environment" style="display:none" onchange="aiEquipment(this)">
+        <input type="file" id="equipFile" accept="image/*" style="display:none" onchange="aiEquipment(this)">
         <textarea id="chatInput" placeholder="问点什么… 或点 📷 拍器械识别"></textarea>
         <button class="xbtn" onclick="sendChat()">发送</button>
       </div>
@@ -429,23 +397,6 @@ function parseFoodText(text){
   });
   return out;
 }
-function quickAdd(){
-  const box = document.getElementById("quickInput");
-  const msg = document.getElementById("quickMsg");
-  const txt = box.value.trim();
-  if(!txt){ toast("先输入内容"); return; }
-  const items = parseFoodText(txt);
-  if(!items.length){
-    msg.textContent = "没识别出食物，试试：鸡胸150 米饭200 香蕉1";
-    return;
-  }
-  items.forEach(it => day().diet.push(it));
-  save(); renderDiet(); updateSummary();
-  box.value = "";
-  msg.textContent = "已加入 " + items.length + " 项：" + items.map(i => i.name + " " + i.grams + "g").join("、");
-  toast("已加入");
-}
-
 /* ---------- AI 通用 ---------- */
 function hasKey(){ return !!((SETTINGS.key || "").trim() || builtinKey()); }
 async function aiCall(messages, opts){
@@ -669,7 +620,12 @@ function calcDiet(){
   d.manual.forEach(m=>{ t.p+=(+m.p||0);t.c+=(+m.c||0);t.f+=(+m.f||0);t.kcal+=(+m.kcal||0); });
   return t;
 }
-function calcBurn(){ const d=day(); return Math.round(d.met*3.5*SETTINGS.bw/200*d.min); }
+function calcBurn(){
+  const d = day();
+  const sets = (d.train||[]).reduce((n,it)=>n+((it.sets||[]).length), 0);
+  const minutes = sets * 2.5;            // 每组约 2.5 分钟（含休息）
+  return Math.round(5 * 3.5 * SETTINGS.bw / 200 * minutes);
+}
 function setVol(it){ return (it.sets||[]).reduce((s,x)=>s+(+x.w||0)*(+x.r||0),0); }
 function calcVol(){ const d=day(); return d.train.reduce((s,it)=>s+setVol(it),0); }
 function lastNDates(n){
@@ -868,8 +824,6 @@ function calcPlan(){
 }
 function renderTrain(){
   const d=day();
-  document.getElementById("min").value = d.min;
-  document.getElementById("met").value = d.met;
   document.getElementById("trows").innerHTML = d.train.map((it,i)=>`
     <div class="excard">
       <div class="exhead">
@@ -886,14 +840,11 @@ function renderTrain(){
         </div>`).join("")}
       <button class="addset" data-add-set="${i}">＋ 加一组</button>
     </div>`).join("");
-  document.getElementById("tchips").innerHTML = planChips().map(n=>`<button class="chip" onclick="addTrain('${n}')">${n}</button>`).join("");
   document.getElementById("tvol").textContent = Math.round(calcVol())+" kg";
   renderHistory();
 }
 function renderDiet(){
   const d=day();
-  const sel=document.getElementById("foodSel");
-  sel.innerHTML = Object.keys(FOODS).map(n=>`<option>${n}</option>`).join("");
   document.getElementById("drows").innerHTML = d.diet.map((it,i)=>{
     if(it.custom){
       return `<div class="row custom" data-i="${i}">
@@ -910,9 +861,6 @@ function renderDiet(){
       <button class="del" data-del="1">✕</button>
     </div>`;
   }).join("");
-  document.getElementById("mlist").innerHTML = d.manual.map((m,i)=>
-    `<div style="display:flex;justify-content:space-between;margin:3px 0"><span>手动：P${r(m.p)} C${r(m.c)} F${r(m.f)} ${Math.round(m.kcal)}kcal</span><button class="del" style="width:auto;padding:2px 8px" onclick="delManual(${i})">✕</button></div>`
-  ).join("");
 }
 function updateSummary(){
   const t=calcDiet(); const burn=calcBurn();
@@ -975,9 +923,6 @@ function addTrain(name){
   day().train.push({name:name||"", sets:[{w:0,r:10},{w:0,r:10},{w:0,r:10}]});
   save(); renderTrain(); updateSummary();
 }
-function setMin(v){ day().min=+v||0; save(); updateSummary(); }
-function setMet(v){ day().met=+v||5; save(); updateSummary(); }
-
 /* ---------- 饮食操作 ---------- */
 document.getElementById("drows").addEventListener("input",e=>{
   const row=e.target.closest(".row"); if(!row) return;
@@ -1001,19 +946,6 @@ function renderDietRow(i){
   const it=day().diet[i]; const f=FOODS[it.name]; const m=f?per100(f,it.grams):{p:0,c:0,f:0,kcal:0};
   const cell=row.querySelector("span"); if(cell) cell.innerHTML=`P${r(m.p)} C${r(m.c)} F${r(m.f)}<br>${Math.round(m.kcal)}kcal`;
 }
-function addDiet(){
-  const name=document.getElementById("foodSel").value;
-  day().diet.push({name,grams:100}); save(); renderDiet(); updateSummary();
-}
-function addManual(){
-  const m={p:+document.getElementById("mp").value||0,c:+document.getElementById("mc").value||0,f:+document.getElementById("mf").value||0,kcal:+document.getElementById("mk").value||0};
-  if(!m.p&&!m.c&&!m.f&&!m.kcal) return toast("先填点东西");
-  day().manual.push(m); save(); renderDiet(); updateSummary();
-  ["mp","mc","mf","mk"].forEach(id=>document.getElementById(id).value="");
-  toast("已加入");
-}
-function delManual(i){ day().manual.splice(i,1); save(); renderDiet(); updateSummary(); }
-
 /* ---------- 日期 ---------- */
 function onDate(v){ date=v||localDate(); render(); }
 function today(){ date=localDate(); render(); }
@@ -1098,7 +1030,8 @@ function clearChat(){ CHAT = []; saveChat(); renderChat(); toast("已清空"); }
 function exportText(){
   const d=day(); const t=calcDiet(); const burn=calcBurn();
   let s = "【"+date+"】训练饮食记录\n体重 "+SETTINGS.bw+"kg\n\n— 训练 —\n";
-  s += "时长 "+d.min+"min（MET "+d.met+"），估算消耗 ~"+burn+" kcal\n";
+  const totalSets = (d.train||[]).reduce((n,it)=>n+((it.sets||[]).length),0);
+  s += "共 "+totalSets+" 组，估算消耗 ~"+burn+" kcal\n";
   if(d.train.length) d.train.forEach(it=>{
     const parts = (it.sets||[]).map(x=>x.w+"kg×"+x.r).join(" / ");
     s+="· "+it.name+"："+parts+"（容量 "+Math.round(setVol(it))+"kg）\n";
