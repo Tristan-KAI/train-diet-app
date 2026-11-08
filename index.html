@@ -16,14 +16,16 @@
   --accent:#4f8cff;--green:#3ddc84;--red:#ff6b6b;--amber:#ffb020;--pink:#c084fc;
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{margin:0;font:15px/1.45 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);padding-bottom:40px}
+body{margin:0;font:15px/1.45 -apple-system,BlinkMacSystemFont,"PingFang SC","Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);padding-bottom:92px}
 header{padding:14px 16px 6px;display:flex;justify-content:space-between;align-items:center}
 h1{font-size:17px;margin:0;font-weight:700}
 .xbtn{background:var(--card);border:1px solid var(--line);color:var(--text);border-radius:10px;padding:7px 12px;font-size:13px}
 .datewrap{display:flex;gap:8px;align-items:center;padding:0 16px 10px}
 input[type=date]{background:var(--card);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:14px;flex:1}
-nav{display:flex;gap:8px;padding:0 12px 10px}
+nav{position:fixed;left:0;right:0;bottom:0;display:flex;gap:4px;padding:8px 10px calc(8px + env(safe-area-inset-bottom));background:rgba(15,17,21,.97);border-top:1px solid var(--line);z-index:30;backdrop-filter:blur(8px)}
 nav button{flex:1;padding:9px 1px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--muted);font-size:11.5px;font-weight:600;white-space:nowrap}
+.exhint{font-size:11px;color:var(--muted);margin:0 0 8px 2px}
+.wchart{width:100%;height:90px}
 nav button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
 main{padding:0 12px}
 section{display:none}
@@ -201,6 +203,15 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
     </div>
 
     <div class="card">
+      <h2>体重记录</h2>
+      <div style="display:flex;gap:8px">
+        <input type="number" inputmode="decimal" id="weightInput" placeholder="今天的体重 kg" style="flex:1;background:#12151c;border:1px solid var(--line);color:var(--text);border-radius:9px;padding:9px;font-size:14px">
+        <button class="xbtn" onclick="recordWeight()">记录</button>
+      </div>
+      <div id="weightChart" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card">
       <h2>AI 周报</h2>
       <button class="addbtn" onclick="aiReport()">📊 生成最近 7 天复盘</button>
       <div id="reportBox" class="small" style="margin-top:10px;white-space:pre-wrap"></div>
@@ -274,6 +285,13 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
       </div>
       <button class="addbtn" onclick="calcPlan()" style="border-style:solid">🧮 计算我的方案</button>
       <div id="calcInfo" class="small" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card">
+      <h2>备份 / 恢复</h2>
+      <button class="addbtn" onclick="exportAll()">📤 导出全部数据（JSON）</button>
+      <label class="addbtn" style="display:block;text-align:center;cursor:pointer">📥 导入备份<input type="file" accept="application/json,.json" onchange="importAll(this)" style="display:none"></label>
+      <div class="small" style="margin-top:8px">导出的文件存好；换手机 / 清缓存后可导入恢复。日常记录不会自动删除，按日期分开存。</div>
     </div>
 
     <div class="card" id="aiCard">
@@ -765,6 +783,7 @@ function render(){
   syncSettingsUI();
   renderPlan();
   renderChat();
+  renderWeight();
   updateSummary();
 }
 function syncSettingsUI(){
@@ -822,14 +841,38 @@ function calcPlan(){
   if(info) info.textContent = "BMR " + Math.round(bmr) + " kcal · 维持 " + Math.round(tdee) + " kcal · 建议 " + kcal + " kcal（P" + p + " C" + c + " F" + f + "）";
   toast("已按你的数据算出方案");
 }
+function exerciseHint(name){
+  if(!name) return "";
+  const keys = Object.keys(db).sort();
+  let lastTxt = "", pr = 0, lastDate = "";
+  keys.forEach(k=>{
+    const d = db[k]; if(!d || !d.train) return;
+    d.train.forEach(it=>{
+      if(it.name !== name || !Array.isArray(it.sets)) return;
+      it.sets.forEach(x=>{ const w = +x.w||0; if(w > pr) pr = w; });
+      if(k < date && it.sets.length){
+        lastTxt = it.sets.map(x=>x.w+"×"+x.r).join(" / ");
+        lastDate = k.slice(5);
+      }
+    });
+  });
+  if(!lastTxt && !pr) return "";
+  const parts = [];
+  if(lastTxt) parts.push("上次 " + lastDate + "：" + lastTxt);
+  if(pr) parts.push("PR " + pr + " kg");
+  return parts.join("　·　");
+}
 function renderTrain(){
   const d=day();
-  document.getElementById("trows").innerHTML = d.train.map((it,i)=>`
+  document.getElementById("trows").innerHTML = d.train.map((it,i)=>{
+    const h = exerciseHint(it.name);
+    return `
     <div class="excard">
       <div class="exhead">
         <input data-ex="${i}" data-f="name" value="${esc(it.name)}" placeholder="动作名">
         <button class="del" data-del-ex="${i}">✕</button>
       </div>
+      ${h ? '<div class="exhint">'+esc(h)+'</div>' : ''}
       ${it.sets.map((s,si)=>`
         <div class="setrow">
           <span class="setno">${si+1}</span>
@@ -839,7 +882,8 @@ function renderTrain(){
           <button class="delset" data-del-set="${i}-${si}">−</button>
         </div>`).join("")}
       <button class="addset" data-add-set="${i}">＋ 加一组</button>
-    </div>`).join("");
+    </div>`;
+  }).join("");
   document.getElementById("tvol").textContent = Math.round(calcVol())+" kg";
   renderHistory();
 }
@@ -949,6 +993,68 @@ function renderDietRow(i){
 /* ---------- 日期 ---------- */
 function onDate(v){ date=v||localDate(); render(); }
 function today(){ date=localDate(); render(); }
+
+/* ---------- 体重记录 ---------- */
+let WEIGHTS = {};
+try{ WEIGHTS = JSON.parse(localStorage.getItem("train_diet_weights_v1") || "{}"); }catch(e){ WEIGHTS = {}; }
+function saveWeights(){ try{ localStorage.setItem("train_diet_weights_v1", JSON.stringify(WEIGHTS)); }catch(e){} }
+function recordWeight(){
+  const el = document.getElementById("weightInput");
+  const v = +el.value;
+  if(!(v > 0)){ toast("先填体重"); return; }
+  WEIGHTS[date] = v; saveWeights();
+  SETTINGS.bw = v; saveSettings(); syncSettingsUI(); updateSummary();
+  el.value = "";
+  renderWeight(); toast("已记录体重");
+}
+function renderWeight(){
+  const el = document.getElementById("weightChart");
+  if(!el) return;
+  const keys = Object.keys(WEIGHTS).sort();
+  if(keys.length < 2){ el.innerHTML = '<div class="small">至少记录 2 次才能看趋势</div>'; return; }
+  const ks = keys.slice(-30);
+  const vals = ks.map(k => +WEIGHTS[k]);
+  let min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
+  if(min === max){ min -= 0.5; max += 0.5; }
+  const W = 320, H = 90, pad = 8;
+  const x = i => pad + i * (W - 2*pad) / (vals.length - 1);
+  const y = v => H - pad - (v - min) / (max - min) * (H - 2*pad);
+  const pts = vals.map((v,i)=> x(i).toFixed(1)+","+y(v).toFixed(1)).join(" ");
+  const dots = vals.map((v,i)=>`<circle cx="${x(i).toFixed(1)}" cy="${y(v).toFixed(1)}" r="2.4" fill="#4f8cff"/>`).join("");
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" class="wchart"><polyline points="${pts}" fill="none" stroke="#4f8cff" stroke-width="2" stroke-linejoin="round"/>${dots}</svg>
+    <div class="small">${ks[0]} → ${ks[ks.length-1]}　${min.toFixed(1)}–${max.toFixed(1)} kg（共 ${keys.length} 次）</div>`;
+}
+
+/* ---------- 备份 / 恢复 ---------- */
+function exportAll(){
+  const data = { v: 1, exportedAt: new Date().toISOString(), db: db, settings: SETTINGS, plan: PLAN, weights: WEIGHTS, chat: CHAT };
+  const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "repear-backup-" + date + ".json";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 3000);
+  toast("已导出备份文件");
+}
+function importAll(input){
+  const f = input.files && input.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = ()=>{
+    try{
+      const d = JSON.parse(r.result);
+      if(d.db) db = d.db;
+      if(d.settings) SETTINGS = Object.assign(SETTINGS, d.settings);
+      if(d.plan) PLAN = d.plan;
+      if(d.weights) WEIGHTS = d.weights;
+      if(d.chat) CHAT = d.chat;
+      try{ localStorage.setItem(DB_KEY, JSON.stringify(db)); }catch(e){}
+      saveSettings(); savePlan(); saveWeights(); saveChat();
+      render(); toast("已恢复备份");
+    }catch(err){ toast("文件格式不对"); }
+  };
+  r.readAsText(f);
+  input.value = "";
+}
 
 /* ---------- AI 聊天 ---------- */
 let CHAT = [];
