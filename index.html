@@ -188,6 +188,23 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
       <div class="small">有氧日：30–40 分钟快走/爬坡 + 10 分钟臀桥/腿弯举/死虫</div>
     </div>
 
+    <div class="card">
+      <h2>训练提醒</h2>
+      <div class="mrow" style="grid-template-columns:1fr 1fr">
+        <div><label>提醒时间</label><input type="time" id="remindTime" value="18:00"></div>
+        <div><label>提前</label>
+          <select id="remindLead">
+            <option value="0">准时</option>
+            <option value="15" selected>15 分钟</option>
+            <option value="30">30 分钟</option>
+            <option value="60">1 小时</option>
+          </select>
+        </div>
+      </div>
+      <button class="addbtn" onclick="exportIcs()" style="border-style:solid">📅 生成训练提醒（导入手机日历）</button>
+      <div class="small" style="margin-top:8px">网页 App 无法在关闭时自己弹通知；导入日历后，系统日历会按你的训练日提醒，App 关着也会响。</div>
+    </div>
+
     <div id="planDays"></div>
 
     <div class="card">
@@ -1040,6 +1057,65 @@ function renderDietRow(i){
 /* ---------- 日期 ---------- */
 function onDate(v){ date=v||localDate(); render(); }
 function today(){ date=localDate(); render(); }
+
+/* ---------- 训练提醒（导出 ics 到系统日历） ---------- */
+function p2(n){ return String(n).padStart(2,"0"); }
+function icsEsc(x){ return String(x).replace(/\\/g,"\\\\").replace(/;/g,"\\;").replace(/,/g,"\\,").replace(/\n/g,"\\n"); }
+function icsStamp(d){
+  return d.getUTCFullYear()+p2(d.getUTCMonth()+1)+p2(d.getUTCDate())+"T"+p2(d.getUTCHours())+p2(d.getUTCMinutes())+p2(d.getUTCSeconds())+"Z";
+}
+function trainingDaysFromSplit(){
+  const map = ["MO","TU","WE","TH","FR","SA","SU"];
+  const split = (PLAN.split || []).slice(0,7);
+  const out = [];
+  split.forEach((lab,i)=>{
+    if(lab === "休" || lab === "有氧") return;
+    out.push({code: map[i], label: lab});
+  });
+  if(!out.length){ ["MO","WE","FR"].forEach(c=>out.push({code:c, label:"训练"})); }
+  return out;
+}
+function buildIcs(){
+  const tv = (document.getElementById("remindTime").value || "18:00").split(":");
+  const hh = p2(+tv[0] || 18), mm = p2(+tv[1] || 0);
+  const lead = +document.getElementById("remindLead").value || 15;
+  const dayIdx = {MO:1,TU:2,WE:3,TH:4,FR:5,SA:6,SU:0};
+  const now = new Date();
+  const days = trainingDaysFromSplit();
+  const L = ["BEGIN:VCALENDAR","VERSION:2.0","PRODID:-//RepEat//CN","CALSCALE:GREGORIAN"];
+  days.forEach((d,i)=>{
+    const t = new Date(now);
+    const diff = (dayIdx[d.code] - now.getDay() + 7) % 7;
+    t.setDate(now.getDate() + diff);
+    const ds = t.getFullYear()+p2(t.getMonth()+1)+p2(t.getDate())+"T"+hh+mm+"00";
+    const end = new Date(t); end.setHours(+hh + 1, +mm, 0, 0);
+    const de = end.getFullYear()+p2(end.getMonth()+1)+p2(end.getDate())+"T"+p2(end.getHours())+p2(end.getMinutes())+"00";
+    L.push("BEGIN:VEVENT");
+    L.push("UID:repear-" + d.code + "-" + i + "-" + Date.now() + "@repear");
+    L.push("DTSTAMP:" + icsStamp(now));
+    L.push("DTSTART;TZID=Asia/Shanghai:" + ds);
+    L.push("DTEND;TZID=Asia/Shanghai:" + de);
+    L.push("RRULE:FREQ=WEEKLY;BYDAY=" + d.code);
+    L.push("SUMMARY:" + icsEsc("训练 · " + d.label));
+    L.push("BEGIN:VALARM");
+    L.push("TRIGGER:-PT" + lead + "M");
+    L.push("ACTION:DISPLAY");
+    L.push("DESCRIPTION:" + icsEsc("该去训练了"));
+    L.push("END:VALARM");
+    L.push("END:VEVENT");
+  });
+  L.push("END:VCALENDAR");
+  return L.join("\r\n");
+}
+function exportIcs(){
+  const blob = new Blob([buildIcs()], { type: "text/calendar;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "repear-训练提醒.ics";
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 3000);
+  toast("已生成日历文件，用「日历」打开导入");
+}
 
 /* ---------- 体重记录 ---------- */
 let WEIGHTS = {};
