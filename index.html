@@ -26,6 +26,9 @@ nav{position:fixed;left:0;right:0;bottom:0;display:flex;gap:4px;padding:8px 10px
 nav button{flex:1;padding:9px 1px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--muted);font-size:11.5px;font-weight:600;white-space:nowrap}
 .exhint{font-size:11px;color:var(--muted);margin:0 0 8px 2px}
 .wchart{width:100%;height:90px}
+.inputrow{display:flex;gap:6px;align-items:flex-end}
+.inputrow textarea{flex:1;margin-bottom:0}
+.micbtn{width:44px;height:44px;flex:0 0 44px;background:#12151c;border:1px solid var(--line);color:var(--text);border-radius:10px;font-size:18px;line-height:1}
 nav button.on{background:var(--accent);color:#fff;border-color:var(--accent)}
 main{padding:0 12px}
 section{display:none}
@@ -143,7 +146,10 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
 
     <div class="card">
       <h2>AI 记录训练</h2>
-      <textarea id="trainAiInput" placeholder="例如：卧推60 4组8次 上斜50 3组10次 深蹲80 4组6次"></textarea>
+      <div class="inputrow">
+        <textarea id="trainAiInput" placeholder="例如：卧推60 4组8次 上斜50 3组10次 深蹲80 4组6次"></textarea>
+        <button class="micbtn" onclick="startVoice('trainAiInput')">🎤</button>
+      </div>
       <button class="addbtn" onclick="aiTrain()">🤖 识别并加入</button>
       <div id="trainAiMsg" class="small" style="margin-top:8px"></div>
     </div>
@@ -153,7 +159,10 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
   <section id="secD">
     <div class="card">
       <h2>快速输入（AI 识别）</h2>
-      <textarea id="quickInput" placeholder="例如：鸡胸150 米饭200 香蕉1 鸡蛋2个  （单位：g/克/个/根/片/勺/碗）"></textarea>
+      <div class="inputrow">
+        <textarea id="quickInput" placeholder="例如：鸡胸150 米饭200 香蕉1 鸡蛋2个  （单位：g/克/个/根/片/勺/碗）"></textarea>
+        <button class="micbtn" onclick="startVoice('quickInput')">🎤</button>
+      </div>
       <button class="addbtn" onclick="aiParse()" style="border-style:solid">🤖 AI 识别</button>
       <label class="addbtn" style="display:block;text-align:center;border-style:solid;cursor:pointer">📷 拍照 / 相册<input type="file" accept="image/*" onchange="aiPhoto(this)" style="display:none"></label>
       <div id="quickMsg" class="small" style="margin-top:8px"></div>
@@ -231,6 +240,7 @@ textarea{width:100%;background:#12151c;border:1px solid var(--line);color:var(--
         <button class="xbtn" onclick="document.getElementById('equipFile').click()">📷</button>
         <input type="file" id="equipFile" accept="image/*" style="display:none" onchange="aiEquipment(this)">
         <textarea id="chatInput" placeholder="问点什么… 或点 📷 拍器械识别"></textarea>
+        <button class="xbtn" onclick="startVoice('chatInput')">🎤</button>
         <button class="xbtn" onclick="sendChat()">发送</button>
       </div>
       <div id="aiUsage" class="small" style="margin-top:8px"></div>
@@ -416,6 +426,29 @@ function parseFoodText(text){
   });
   return out;
 }
+/* ---------- 语音输入 ---------- */
+let _recog = null;
+function startVoice(targetId){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){ toast("这个浏览器不支持语音，用键盘上的 🎤 也能输入"); return; }
+  if(_recog){ try{ _recog.stop(); }catch(e){} _recog = null; }
+  const el = document.getElementById(targetId);
+  if(!el) return;
+  const r = new SR();
+  r.lang = "zh-CN";
+  r.interimResults = true;
+  r.maxAlternatives = 1;
+  r.onresult = (ev)=>{
+    let txt = "";
+    for(let i = ev.resultIndex; i < ev.results.length; i++) txt += ev.results[i][0].transcript;
+    el.value = txt;
+  };
+  r.onerror = (ev)=>{ toast("语音识别失败：" + (ev.error || "")); };
+  r.onend = ()=>{ _recog = null; };
+  _recog = r;
+  try{ r.start(); toast("请说话…"); }catch(e){ toast("启动失败，重试一次"); }
+}
+
 /* ---------- AI 通用 ---------- */
 function hasKey(){ return !!((SETTINGS.key || "").trim() || builtinKey()); }
 const AI_DAILY_LIMIT = 50;
